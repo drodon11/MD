@@ -1,0 +1,26 @@
+{
+    "id": "D62912D5",
+    "path": "~/flightprices-ml/scripts/01_clean_interim.R",
+    "project_path": "scripts/01_clean_interim.R",
+    "type": "r_source",
+    "hash": "747839868",
+    "contents": "",
+    "dirty": false,
+    "created": 1771949546171.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "124,1",
+        "scrollLine": "111"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1771951877,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1771951877836,
+    "read_only": false,
+    "read_only_alternatives": []
+}
