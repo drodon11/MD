@@ -1,0 +1,17 @@
+Original name,Assigned name,Description,Type,Measuring units,Missing code,Measuring procedure,Range,Role
+flightDate,flightDate,Date of the flight,DATE,YYYY-MM-DD,,,,Explanatory
+startingAirport,startApt,3-letter code of starting airport,Quali,,,,,Explanatory
+destinationAirport,destApt,3-letter code of destination airport,Quali,,,,,Explanatory
+elapsedDays,elapsedDays,Number of elapsed days for the flight,Num,days,,,"[0, 1.04]",Explanatory
+isBasicEconomy,economy,The flight ticket is economy class,Boolean,,,,,Explanatory
+isNonStop,nonStop,The flight is non stop,Boolean,,,,,Explanatory
+taxAmount,taxAmount,Taxes applied to base price,Num,$,,,,Explanatory
+totalFare,totalPrice,Total price of the ticket ,Num,$,,,,Response
+seatsRemaining,seatsLeft,Number of seats left in the flight,Num,seats,,,"[0, 10]",Explanatory
+totalTravelDistance,travelDistance,Total travel distance of the flight,Num,mi.,"""""",,,Explanatory
+segmentsDepartureTimeRaw,departure,Time of departure of flight,DATE,YYYY-MM-DDTHH:MM:SS.sss±HH:MM,,,,Explanatory
+segmentsArrivalTimeRaw,arrival,Time of arrival of flight,DATE,YYYY-MM-DDTHH:MM:SS.sss±HH:MM,,,,Explanatory
+segmentsAirlineName,airline,Name of flight airline,Quali,,,,,Response ?
+segmentsEquipmentDescription,equipment,Name of flight equipment,Quali,,"""""",,,Response ?
+segmentsDistance,segmentDistance,Distance of each flight leg,Num,mi.,"""""",,,Explanatory
+layoverNumber,layoverNumber,Number of segments in the flight,Num,layovers,,,"[0, 3]",Explanatory
