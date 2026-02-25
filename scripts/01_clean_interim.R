@@ -29,7 +29,7 @@ df <- read_csv(raw_path, show_col_types = FALSE)
 
 # ---------- 2) rename (Original -> Assigned) ----------
 rename_map <- c(
-  "flightDate"                   = "date",
+  "flightDate"                   = "flightDate",
   "startingAirport"              = "startApt",
   "destinationAirport"           = "destApt",
   "elapsedDays"                  = "elapsedDays",
@@ -102,7 +102,13 @@ if ("segmentDistance_raw" %in% names(df)) {
 }
 
 # ---------- 4) type conversions (según metadata) ----------
-# date: DATE
+# flightDate: convertimos a tipo Date si existe
+if ("flightDate" %in% names(df)) {
+  df$flightDate <- as.Date(df$flightDate, format = "%Y-%m-%d")
+} else {
+  df$flightDate <- as.Date(NA)
+}
+
 # datetimes: convertimos SOLO el primer segmento a POSIXct
 parse_iso_dt_first <- function(x) {
   if (is.na(x) || is.null(x)) return(NA_character_)
@@ -145,7 +151,6 @@ for (cname in num_cols) df[[cname]] <- to_numeric(df[[cname]])
 # Texto
 char_cols <- intersect(c("startApt","destApt","airline","equipment"), names(df))
 for (cname in char_cols) df[[cname]] <- as.character(df[[cname]])
-
 # ---------- 5) range checks (metadata) ----------
 clamp <- function(x, lo, hi) if (is.numeric(x)) pmin(pmax(x, lo), hi) else x
 if ("elapsedDays" %in% names(df))   df$elapsedDays   <- clamp(df$elapsedDays,   0, 1.04)
@@ -154,7 +159,7 @@ if ("layoverNumber" %in% names(df)) df$layoverNumber <- clamp(df$layoverNumber, 
 
 # ---------- 6) keep only metadata columns (orden final) ----------
 keep_order <- c(
-  "date","startApt","destApt","elapsedDays","economy","nonStop",
+  "flightDate","startApt","destApt","elapsedDays","economy","nonStop",
   "taxAmount","totalPrice","seatsLeft","travelDistance",
   "departure","arrival","airline","equipment","segmentDistance","layoverNumber"
 )
@@ -186,3 +191,4 @@ print(dim(df))
 
 message("\nPrimeras filas:")
 print(head(df))
+
