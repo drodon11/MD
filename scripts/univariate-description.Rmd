@@ -1,0 +1,117 @@
+---
+title: "Análisis Inicial - Flight Prices"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+list.of.packages <- c("ggplot2", "dplyr", "visdat", "naniar", "DataExplorer",
+                      "VIM", "tidyr", "knitr")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if (length(new.packages) > 0) install.packages(new.packages, repos = "https://cloud.r-project.org")
+lapply(list.of.packages, require, character.only = TRUE)
+```
+
+```{r carga-limpieza}
+if (!requireNamespace("here", quietly = TRUE)) install.packages("here")
+
+input_path <- here::here("data", "interim", "flightprices_interim.rds")
+
+dd <- readRDS(input_path)
+```
+
+## Resumen estadístico general
+
+```{r resumen}
+resumen <- data.frame(
+  Variable = names(dd),
+  Tipo     = sapply(dd, function(x) class(x)[1]),
+  NAs      = sapply(dd, function(x) sum(is.na(x))),
+  Media    = sapply(dd, function(x) if (is.numeric(x)) round(mean(x,   na.rm = TRUE), 2) else "-"), 
+  Mediana  = sapply(dd, function(x) if (is.numeric(x)) round(median(x, na.rm = TRUE), 2) else "-"),
+  SD       = sapply(dd, function(x) if (is.numeric(x)) round(sd(x,     na.rm = TRUE), 2) else "-")
+)
+
+kable(resumen)
+```
+
+## Análisis univariante 
+
+```{r analisis-univariante, results='asis', fig.width=10, fig.height=4}
+analisis <- function(X, nom) {
+  cat("\n\n### Variable:", nom, "\n\n")
+  
+  # NUMÉRICO
+  if (is.numeric(X)) {
+    cat("**Media** =", round(mean(X, na.rm = TRUE), 2),
+        "| **SD** =", round(sd(X, na.rm = TRUE), 2),
+        "| **CV** =", round(sd(X, na.rm = TRUE) / mean(X, na.rm = TRUE), 4), "\n\n")
+    
+    p1 <- ggplot(data.frame(x = X), aes(x = x)) +
+      geom_histogram(fill = "steelblue", color = "white", bins = 30) +
+      labs(title = paste("Distribución de", nom), x = nom, y = "Frecuencia") +
+      theme_minimal()
+    
+    p2 <- ggplot(data.frame(x = X), aes(y = x)) +
+      geom_boxplot(fill = "orange", alpha = 0.7) +
+      labs(title = paste("Boxplot de", nom), y = nom) +
+      theme_minimal()
+    
+    print(p1)
+    print(p2)
+    
+ # CATEGÓRICO
+  } else if (is.factor(X) || is.character(X) || is.logical(X)) {
+    if(is.logical(X)) X <- as.factor(X) 
+    frecs <- table(X, useNA = "ifany")
+    prop  <- round(prop.table(frecs) * 100, 2)
+    
+    nombres_categorias <- names(frecs)
+    nombres_categorias[is.na(nombres_categorias)] <- "Valores Perdidos (NA)"
+    
+    tab <- data.frame(
+      Categoría = nombres_categorias,
+      Frecuencia = as.vector(frecs), 
+      Porcentaje = as.vector(prop)
+    )
+    
+    print(kable(tab, caption = paste("Frecuencias para", nom), row.names = FALSE))
+    
+    df_plot <- as.data.frame(frecs)
+    colnames(df_plot) <- c("Clase", "Freq")
+    df_plot$Clase <- as.character(df_plot$Clase)
+    df_plot$Clase[is.na(df_plot$Clase)] <- "NA"
+    
+    p_bar <- ggplot(df_plot, aes(x = reorder(Clase, -Freq), y = Freq, fill = Clase)) +
+      geom_bar(stat = "identity") +
+      labs(title = paste("Frecuencias de", nom), x = nom, y = "N") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      guides(fill = "none")
+    
+    print(p_bar)
+    
+  # FECHA
+  } else if (inherits(X, "Date") || inherits(X, "POSIXct")) {
+    print(kable(t(as.matrix(summary(X)))))
+    
+    p_date <- ggplot(data.frame(x = X), aes(x = x)) +
+      geom_histogram(fill = "darkseagreen", color = "white", bins = 20) +
+      labs(title = paste("Evolución temporal:", nom), x = "Fecha", y = "Vuelos") +
+      theme_minimal()
+    
+    print(p_date)
+  }
+  
+  cat("\n\n---\n\n")
+}
+
+for (col_name in names(dd)) {
+  analisis(dd[[col_name]], col_name)
+}
+```
