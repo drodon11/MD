@@ -1,5 +1,5 @@
 ---
-title: "Análisis Inicial - Flight Prices"
+title: "Basic initial univariate descriptive statistic of raw variables - Flight Prices"
 output:
   html_document:
     toc: true
@@ -11,7 +11,7 @@ output:
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 list.of.packages <- c("ggplot2", "dplyr", "visdat", "naniar", "DataExplorer",
-                      "VIM", "tidyr", "knitr")
+                      "VIM", "tidyr", "knitr", "gridExtra")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if (length(new.packages) > 0) install.packages(new.packages, repos = "https://cloud.r-project.org")
 lapply(list.of.packages, require, character.only = TRUE)
@@ -25,22 +25,36 @@ input_path <- here::here("data", "interim", "flightprices_interim.rds")
 dd <- readRDS(input_path)
 ```
 
-## Resumen estadístico general
+## General Statistical Overview
 
-```{r resumen}
-resumen <- data.frame(
+```{r resumen-general}
+
+inventario <- data.frame(
   Variable = names(dd),
-  Tipo     = sapply(dd, function(x) class(x)[1]),
-  NAs      = sapply(dd, function(x) sum(is.na(x))),
-  Media    = sapply(dd, function(x) if (is.numeric(x)) round(mean(x,   na.rm = TRUE), 2) else "-"), 
-  Mediana  = sapply(dd, function(x) if (is.numeric(x)) round(median(x, na.rm = TRUE), 2) else "-"),
-  SD       = sapply(dd, function(x) if (is.numeric(x)) round(sd(x,     na.rm = TRUE), 2) else "-")
+  Type     = sapply(dd, function(x) paste(class(x), collapse = "/")),
+  NAs  = sapply(dd, function(x) sum(is.na(x)))
 )
 
-kable(resumen)
+kable(inventario, caption = "Information of all variables")
+
+df_num <- dd %>% select(where(is.numeric))
+
+resumen_num <- data.frame(
+  Variable = names(df_num),
+  Min      = sapply(df_num, function(x) min(x, na.rm = TRUE)),
+  Median   = sapply(df_num, function(x) median(x, na.rm = TRUE)),
+  Mean     = sapply(df_num, function(x) mean(x, na.rm = TRUE)),
+  Max      = sapply(df_num, function(x) max(x, na.rm = TRUE)),
+  SD       = sapply(df_num, function(x) sd(x, na.rm = TRUE)),
+  CV       = sapply(df_num, function(x) sd(x, na.rm = TRUE) / mean(x, na.rm = TRUE))
+)
+
+kable(resumen_num, digits = 2, caption = "Statistical Summary of Numeric Variables")
+
+
 ```
 
-## Análisis univariante 
+## Univariate analysis
 
 ```{r analisis-univariante, results='asis', fig.width=10, fig.height=4}
 analisis <- function(X, nom) {
@@ -48,18 +62,18 @@ analisis <- function(X, nom) {
   
   # NUMÉRICO
   if (is.numeric(X)) {
-    cat("**Media** =", round(mean(X, na.rm = TRUE), 2),
-        "| **SD** =", round(sd(X, na.rm = TRUE), 2),
-        "| **CV** =", round(sd(X, na.rm = TRUE) / mean(X, na.rm = TRUE), 4), "\n\n")
+   # cat("**Mean** =", round(mean(X, na.rm = TRUE), 2),
+   #     "| **SD** =", round(sd(X, na.rm = TRUE), 2),
+   #     "| **CV** =", round(sd(X, na.rm = TRUE) / mean(X, na.rm = TRUE), 4), "\n\n")
     
     p1 <- ggplot(data.frame(x = X), aes(x = x)) +
       geom_histogram(fill = "steelblue", color = "white", bins = 30) +
-      labs(title = paste("Distribución de", nom), x = nom, y = "Frecuencia") +
+      labs(title = paste("Distribution of", nom), x = nom, y = "Frequency") +
       theme_minimal()
     
     p2 <- ggplot(data.frame(x = X), aes(y = x)) +
       geom_boxplot(fill = "orange", alpha = 0.7) +
-      labs(title = paste("Boxplot de", nom), y = nom) +
+      labs(title = paste("Boxplot of", nom), y = nom) +
       theme_minimal()
     
     print(p1)
@@ -72,15 +86,15 @@ analisis <- function(X, nom) {
     prop  <- round(prop.table(frecs) * 100, 2)
     
     nombres_categorias <- names(frecs)
-    nombres_categorias[is.na(nombres_categorias)] <- "Valores Perdidos (NA)"
+    nombres_categorias[is.na(nombres_categorias)] <- "NAs"
     
     tab <- data.frame(
-      Categoría = nombres_categorias,
-      Frecuencia = as.vector(frecs), 
-      Porcentaje = as.vector(prop)
+      Category = nombres_categorias,
+      Frequency = as.vector(frecs), 
+      Percentage = as.vector(prop)
     )
     
-    print(kable(tab, caption = paste("Frecuencias para", nom), row.names = FALSE))
+    print(kable(tab, caption = paste("Frequencies of", nom), row.names = FALSE))
     
     df_plot <- as.data.frame(frecs)
     colnames(df_plot) <- c("Clase", "Freq")
@@ -89,7 +103,7 @@ analisis <- function(X, nom) {
     
     p_bar <- ggplot(df_plot, aes(x = reorder(Clase, -Freq), y = Freq, fill = Clase)) +
       geom_bar(stat = "identity") +
-      labs(title = paste("Frecuencias de", nom), x = nom, y = "N") +
+      labs(title = paste("Frequencies of", nom), x = nom, y = "N") +
       theme_minimal() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
       guides(fill = "none")
@@ -97,15 +111,28 @@ analisis <- function(X, nom) {
     print(p_bar)
     
   # FECHA
-  } else if (inherits(X, "Date") || inherits(X, "POSIXct")) {
-    print(kable(t(as.matrix(summary(X)))))
+ } else if (inherits(X, "Date") || inherits(X, "POSIXct")) {
     
-    p_date <- ggplot(data.frame(x = X), aes(x = x)) +
+    sum_x <- summary(X)
+    df_temp <- as.data.frame(as.list(as.character(sum_x)))
+    colnames(df_temp) <- names(sum_x)
+    print(kable(df_temp))
+    
+    # Histogram
+    p_hist <- ggplot(data.frame(x = X), aes(x = x)) +
       geom_histogram(fill = "darkseagreen", color = "white", bins = 20) +
-      labs(title = paste("Evolución temporal:", nom), x = "Fecha", y = "Vuelos") +
+      labs(title = paste("Temporal evolution:", nom), x = "Date", y = "Flights") +
       theme_minimal()
     
-    print(p_date)
+    #print(p_date)
+    p_box <- ggplot(data.frame(x = X), aes(y = x, x = "")) +
+      geom_boxplot(fill = "darkseagreen", alpha = 0.5) +
+      labs(title = paste("Boxplot of:", nom), y = "Date", x = "") +
+      theme_minimal() +
+      coord_flip()
+    
+    grid.arrange(p_hist, p_box, ncol = 2)
+    
   }
   
   cat("\n\n---\n\n")
