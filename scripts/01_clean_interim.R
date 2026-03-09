@@ -85,20 +85,23 @@ if ("departure_raw" %in% names(df)) {
   }
 }
 
-# segmentDistance total: si viene "327||221" -> 548
-sum_segments_num <- function(x) {
+# segmentDistance: extraer solo el valor del primer segmento
+get_first_segment_num <- function(x) {
   if (is.na(x) || is.null(x)) return(NA_real_)
-  parts <- unlist(strsplit(as.character(x), "\\|\\|"))
-  parts <- trimws(parts)
-  parts <- parts[parts != "" & parts != "None"]
-  nums <- suppressWarnings(as.numeric(parts))
-  if (all(is.na(nums))) return(NA_real_)
-  sum(nums, na.rm = TRUE)
+  
+  # Si empieza por "||", el primer segmento está vacío
+  if (startsWith(trimws(as.character(x)), "||")) return(NA_real_)
+  
+  first <- strsplit(as.character(x), "\\|\\|")[[1]][1]
+  first <- trimws(first)
+  
+  if (first == "" || first == "None") return(NA_real_)
+  suppressWarnings(as.numeric(first))
 }
 
 df$segmentDistance <- NA_real_
 if ("segmentDistance_raw" %in% names(df)) {
-  df$segmentDistance <- vapply(df$segmentDistance_raw, sum_segments_num, numeric(1))
+  df$segmentDistance <- vapply(df$segmentDistance_raw, get_first_segment_num, numeric(1))
 }
 
 # ---------- 4) type conversions (según metadata) ----------
@@ -112,7 +115,14 @@ if ("flightDate" %in% names(df)) {
 # datetimes: convertimos SOLO el primer segmento a POSIXct
 parse_iso_dt_first <- function(x) {
   if (is.na(x) || is.null(x)) return(NA_character_)
+  
+  if (startsWith(trimws(as.character(x)), "||")) return(NA_character_)
+  
   first <- strsplit(as.character(x), "\\|\\|")[[1]][1]
+  first <- trimws(first)
+  
+  if (first == "" || first == "None") return(NA_character_)
+  
   gsub("T", " ", first, fixed = TRUE)
 }
 
@@ -148,9 +158,24 @@ num_cols <- intersect(
 )
 for (cname in num_cols) df[[cname]] <- to_numeric(df[[cname]])
 
-# Texto
+# Texto: Extraer solo el primer segmento para variables categóricas
 char_cols <- intersect(c("startApt","destApt","airline","equipment"), names(df))
-for (cname in char_cols) df[[cname]] <- as.character(df[[cname]])
+
+get_first_segment_char <- function(x) {
+  if (is.na(x) || is.null(x)) return(NA_character_)
+  
+  if (startsWith(trimws(as.character(x)), "||")) return(NA_character_)
+  
+  first <- strsplit(as.character(x), "\\|\\|")[[1]][1]
+  first <- trimws(first)
+  
+  if (first == "" || first == "None") return(NA_character_)
+  return(first)
+}
+
+for (cname in char_cols) {
+  df[[cname]] <- vapply(df[[cname]], get_first_segment_char, character(1))
+}
 # ---------- 5) range checks (metadata) ----------
 clamp <- function(x, lo, hi) if (is.numeric(x)) pmin(pmax(x, lo), hi) else x
 if ("elapsedDays" %in% names(df))   df$elapsedDays   <- clamp(df$elapsedDays,   0, 1.04)
@@ -172,7 +197,7 @@ df <- df[, keep_order, drop = FALSE]
 # ---------- 7) save ----------
 saveRDS(df, out_path)
 
-message("\n✅ Archivo guardado correctamente en:")
+message("\n Archivo guardado correctamente en:")
 message("   ", normalizePath(out_path, winslash = "/"))
 
 # ---------- 8) quick sanity print ----------
