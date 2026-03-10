@@ -122,3 +122,6 @@ print(
 # Actualizamos el dataset
 dd <- dd_imputed
 
+out_path_clean <- file.path(getwd(), "data", "interim", "flightprices_preprocessed.rds")
+saveRDS(dd, out_path_clean)
+
