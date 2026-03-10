@@ -10,6 +10,9 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
+Sys.setlocale("LC_TIME", "C") 
+
+
 list.of.packages <- c("ggplot2", "dplyr", "visdat", "naniar", "DataExplorer",
                       "VIM", "tidyr", "knitr", "gridExtra")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
@@ -35,8 +38,12 @@ inventario <- data.frame(
   NAs  = sapply(dd, function(x) sum(is.na(x)))
 )
 
-kable(inventario, caption = "Information of all variables")
+kable(inventario, caption = "**Information of all variables**")
+```
 
+The table reveals the existence of missing values (NAs) in three variables: `travelDistance`, `segmentDistance` and `equipment`. This means an imputation method will be required during the preprocessing stage.
+
+```{r resumen-num}
 df_num <- dd %>% select(where(is.numeric))
 
 resumen_num <- data.frame(
@@ -51,35 +58,83 @@ resumen_num <- data.frame(
 
 kable(resumen_num, digits = 2, caption = "Statistical Summary of Numeric Variables")
 
-
 ```
+From this table, we can conclude different things:
+
+All variables show a high coefficient of variation (CV), meaning that the data is pretty spread out around the mean. For example, on both `totalPrice`and `travelDistance`, this high dispersion makes sense since our dataset, mixes short, cheap flights with long and expensive ones, this way the average value does not represent a typical flight.
+
+We can also see that the variable `elapsedDays`has an extreme CV of 2.46. This happens because the CV formula divides the Standard Deviation (SD) by the mean. Since the vast majority of flights arrive on the same day (`elapsedDays` = 0), the mean is extremely close to zero, which inflates the CV.
+
+Finally, there is a clear indication of outliers. For instance, while 50% of the flights cost 300 USD or less (median), the maximum value of `totalPrice`reaches 2570 USD. This outliers distort the mean, so an IQR-based (Interquartile Range) clipping treatment will be strictly necessary during the preprocessing stage.
 
 ## Univariate analysis
 
 ```{r analisis-univariante, results='asis', fig.width=10, fig.height=4}
+# DICTIONARY OF COMMENTS (English Translation)
+comentarios <- list(
+  flightDate = "The data covers a flight period from April 2022 to November 2022. The distribution shows a concentration (high season) between July and September.",
+  
+  startApt = "There is a uniform distribution among major airports. LAX (Los Angeles) and BOS (Boston) stand out as the most frequent origins in the dataset",
+  
+  destApt = "Similar to the origin airport, LAX and LGA (LaGuardia) are frequent destinations.",
+  
+  elapsedDays = "The boxplot for elapsedDays appears as a line at 0.00. Since over 85% of the flights land on the same day, the 1st quartile, the median, and the 3rd quartile are exactly 0, whick makes the Interquartile Range (IQR) to 0. Consequently, any flight arriving the next day is considered an outlier.",
+  
+  economy = "",
+  
+  nonStop = "",
+  
+  taxAmount = "The histogram shows that the majority of flights have taxes concentrated between 30 and 60 USD, with a notable secondary peak near 110 USD. The boxplot indicates that these are outliers.",
+  
+  totalPrice = "This is the target variable. The data shows a strong imbalance towards lower prices. While the median flight price is 300 USD, the distribution is stretched out by a long 'tail' of more expensive tickets. The boxplot  shows this, with outliers reaching 2570 USD.",
+  
+  seatsLeft = "This is a distribution with no outliers, with a [0, 10] range. Sharp frequency peaks are observed at 7 and 9 remaining seats.",
+  
+  travelDistance = "Presents a bimodal distribution, reflecting a mix of short and long routes",
+  
+  departure = "Departure activity mirrors the flightDate distribution, confirming the increase in flights during the summer months.",
+  
+  arrival = "Like departure, there is an increase of arrivals during summer months.",
+  
+  airline = "The market in this sample is dominated by three major airlines (American Airlines, Delta, and United), being nearly 80% of the flights.",
+  
+  equipment = " ",
+  
+  segmentDistance = "There is a high concentration below 800 miles. This indicates that the majority of the first segments i are short or medium.",
+  
+  layoverNumber = "The distribution shows that most flights involve one layover, followed by direct flights (0 layovers). Layovers of 2 segments are less common, while 3-layover flights are rare enough to be classified as outliers."
+)
+
+unidades <- list(
+  taxAmount       = "USD",
+  totalPrice      = "USD",
+  travelDistance  = "miles",
+  segmentDistance = "miles"
+)
+
 analisis <- function(X, nom) {
   cat("\n\n### Variable:", nom, "\n\n")
   
-  # NUMÉRICO
+  # NUMERIC
+# NUMERIC
   if (is.numeric(X)) {
-   # cat("**Mean** =", round(mean(X, na.rm = TRUE), 2),
-   #     "| **SD** =", round(sd(X, na.rm = TRUE), 2),
-   #     "| **CV** =", round(sd(X, na.rm = TRUE) / mean(X, na.rm = TRUE), 4), "\n\n")
+    unidad <- if (nom %in% names(unidades)) paste0(" (", unidades[[nom]], ")") else ""
     
     p1 <- ggplot(data.frame(x = X), aes(x = x)) +
       geom_histogram(fill = "steelblue", color = "white", bins = 30) +
-      labs(title = paste("Distribution of", nom), x = nom, y = "Frequency") +
+      labs(title = paste("Distribution of", nom),
+           x = paste0(nom, unidad),
+           y = "Frequency") +
       theme_minimal()
     
     p2 <- ggplot(data.frame(x = X), aes(y = x)) +
       geom_boxplot(fill = "orange", alpha = 0.7) +
-      labs(title = paste("Boxplot of", nom), y = nom) +
+      labs(title = paste("Boxplot of", nom),
+           y = paste0(nom, unidad)) +
       theme_minimal()
     
-    print(p1)
-    print(p2)
-    
- # CATEGÓRICO
+    grid.arrange(p1, p2, ncol = 2)   
+  # CATEGORICAL / BOOLEAN
   } else if (is.factor(X) || is.character(X) || is.logical(X)) {
     if(is.logical(X)) X <- as.factor(X) 
     frecs <- table(X, useNA = "ifany")
@@ -101,30 +156,29 @@ analisis <- function(X, nom) {
     df_plot$Clase <- as.character(df_plot$Clase)
     df_plot$Clase[is.na(df_plot$Clase)] <- "NA"
     
-    p_bar <- ggplot(df_plot, aes(x = reorder(Clase, -Freq), y = Freq, fill = Clase)) +
+    # Filter to avoid overlapping labels (Top 15)
+p_bar <- ggplot(head(df_plot[order(-df_plot$Freq), ], 15), 
+                    aes(x = reorder(Clase, -Freq), y = Freq, fill = Clase)) +
       geom_bar(stat = "identity") +
-      labs(title = paste("Frequencies of", nom), x = nom, y = "N") +
+      labs(title = paste("Top Frequencies of", nom), x = "Category", y = "Count") +
       theme_minimal() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
       guides(fill = "none")
     
     print(p_bar)
     
-  # FECHA
- } else if (inherits(X, "Date") || inherits(X, "POSIXct")) {
+  # DATES / TIME
+  } else if (inherits(X, "Date") || inherits(X, "POSIXct")) {
     
     sum_x <- summary(X)
     df_temp <- as.data.frame(as.list(as.character(sum_x)))
     colnames(df_temp) <- names(sum_x)
     print(kable(df_temp))
     
-    # Histogram
     p_hist <- ggplot(data.frame(x = X), aes(x = x)) +
       geom_histogram(fill = "darkseagreen", color = "white", bins = 20) +
       labs(title = paste("Temporal evolution:", nom), x = "Date", y = "Flights") +
       theme_minimal()
     
-    #print(p_date)
     p_box <- ggplot(data.frame(x = X), aes(y = x, x = "")) +
       geom_boxplot(fill = "darkseagreen", alpha = 0.5) +
       labs(title = paste("Boxplot of:", nom), y = "Date", x = "") +
@@ -132,7 +186,11 @@ analisis <- function(X, nom) {
       coord_flip()
     
     grid.arrange(p_hist, p_box, ncol = 2)
-    
+  }
+  
+  # --- PRINT COMMENT IF IT EXISTS ---
+  if (nom %in% names(comentarios)) {
+    cat( comentarios[[nom]], "\n\n")
   }
   
   cat("\n\n---\n\n")
