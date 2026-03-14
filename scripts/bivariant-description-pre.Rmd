@@ -1,0 +1,374 @@
+---
+title: "Bivariate Descriptive Statistics before preprocessing - Flight Prices"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+Sys.setlocale("LC_TIME", "C")
+
+list.of.packages <- c(
+  "ggplot2", "dplyr", "visdat", "naniar", "DataExplorer",
+  "VIM", "tidyr", "knitr", "here", "gridExtra"
+)
+
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[, "Package"])]
+
+if (length(new.packages) > 0) {
+  install.packages(new.packages, repos = "https://cloud.r-project.org")
+}
+
+invisible(lapply(list.of.packages, require, character.only = TRUE))
+```
+
+```{r load-cleaning}
+input_path <- here::here("data", "interim", "flightprices_interim.rds")
+dd <- readRDS(input_path)
+```
+
+## General Statistical Overview
+
+```{r general-summary}
+inventario <- data.frame(
+  Variable = names(dd),
+  Type     = sapply(dd, function(x) paste(class(x), collapse = "/")),
+  NAs      = sapply(dd, function(x) sum(is.na(x)))
+)
+
+knitr::kable(inventario, caption = "**Information of all variables**")
+```
+
+## Bivariate Analysis
+
+```{r bivariate-analysis, results='asis', fig.width=10, fig.height=4}
+
+comentarios_bivariantes <- list(
+  "date__totalPrice" = "The relationship between flight date and total price appears weak. This suggests that, within the observed period, temporal variation alone does not strongly determine fare levels, although seasonal effects may still exist in combination with route and airline characteristics.",
+  
+  "date__taxAmount" = "The association between date and tax amount seems limited. This indicates that taxes are not mainly driven by calendar progression, but rather by fare structure, airport fees, and itinerary characteristics.",
+  
+  "elapsedDays__totalPrice" = "The relationship between elapsedDays and totalPrice appears weak. Flights arriving on the next day do not systematically imply higher prices, although this variable may still capture some itinerary complexity.",
+  
+  "elapsedDays__travelDistance" = "A positive association is plausible because flights that arrive on the following day are often longer or operationally more complex. However, elapsedDays alone is still a coarse representation of trip duration.",
+  
+  "taxAmount__totalPrice" = "A clear positive relationship is expected between taxAmount and totalPrice, since taxes and fees generally increase with ticket value. This variable may therefore contain information that is very close to the target in predictive terms.",
+  
+  "travelDistance__totalPrice" = "The scatterplot suggests a positive relationship between travel distance and ticket price. This is expected because longer routes usually involve higher operating costs, although the dispersion indicates that route distance alone does not fully explain fare variability.",
+  
+  "segmentDistance__totalPrice" = "The first-segment distance also shows a positive association with total price. However, the pattern is noisier than for total travel distance, which is reasonable because final price depends on the whole itinerary and not only on its first leg.",
+  
+  "travelDistance__segmentDistance" = "These variables are expected to be strongly associated because both reflect route length. This suggests partial redundancy between them and should be considered later if multicollinearity becomes relevant.",
+  
+  "seatsLeft__totalPrice" = "The relationship between the number of remaining seats and price appears weak. Although scarcity may affect fares, seat availability alone does not explain most of the observed price variation in this dataset.",
+  
+  "layoverNumber__totalPrice" = "Flights with more layovers do not necessarily appear more expensive. In practice, itineraries with stops are often used by airlines to offer lower fares than direct flights.",
+  
+  "nonStop__totalPrice" = "Direct flights tend to show a different price distribution from flights with stops, and often a higher median fare. This is consistent with the premium passengers are willing to pay for convenience and shorter travel time.",
+  
+  "economy__totalPrice" = "Economy and non-economy tickets are expected to differ clearly in price distribution. This pattern reflects fare segmentation, where cabin class strongly influences the final ticket price.",
+  
+  "airline__totalPrice" = "Ticket prices vary across airlines, revealing heterogeneous pricing strategies and route structures. Some carriers may concentrate on higher-value itineraries, while others appear more competitive on price.",
+  
+  "startApt__totalPrice" = "Origin airport is associated with noticeable differences in ticket prices. These differences may reflect route mix, airport competition, and market demand specific to each departure airport.",
+  
+  "destApt__totalPrice" = "Destination airport also appears related to fare differences. This suggests that some destination markets are systematically more expensive, possibly due to longer average distance or lower competitive pressure.",
+  
+  "startApt__destApt" = "The contingency table reflects the structural composition of the dataset. It shows how routes are distributed across origin-destination airport pairs, which is useful to understand network coverage rather than price behavior directly.",
+  
+  "airline__travelDistance" = "Different airlines seem to operate routes with different distance profiles. This may indicate market specialization, where some carriers are more concentrated on short-haul or long-haul routes.",
+  
+  "nonStop__travelDistance" = "The relationship between non-stop status and travel distance may reflect route design. Some ranges are more compatible with direct services, while others are more likely to involve stopovers.",
+  
+  "layoverNumber__travelDistance" = "Longer routes tend to allow for more layovers, although the overlap between categories suggests that route planning is not determined by distance alone.",
+  
+  "equipment__totalPrice" = "Aircraft equipment may be associated with price differences, but this relationship should be interpreted carefully because equipment type is also linked to airline strategy, route characteristics, and some missing data in the variable.",
+  
+  "departure__totalPrice" = "Departure time may show some association with ticket price, although this relationship is usually indirect. It can reflect timetable convenience, route demand, or the commercial strategy applied to certain time slots.",
+  
+  "arrival__totalPrice" = "Arrival time may also capture some pricing differences, but mainly as a proxy for schedule design rather than as a direct cause of fare variation.",
+  
+  "departure__arrival" = "Departure and arrival times are structurally related by definition, so their association is expected. This relationship is not especially informative for price behaviour, but it confirms the internal coherence of the temporal variables.",
+  
+  "date__departure" = "A strong association between date and departure is expected because departure contains both date and time information. This is more a data structure relationship than an economically meaningful one.",
+  
+  "date__arrival" = "As with departure, the relationship between date and arrival is mainly structural because both variables are part of the same temporal information recorded for each flight."
+)
+
+unidades <- list(
+  taxAmount       = "USD",
+  totalPrice      = "USD",
+  travelDistance  = "miles",
+  segmentDistance = "miles"
+)
+
+analisis <- function(X, Y, nom_x, nom_y) {
+  
+  cat("\n\n### Variables:", nom_x, "vs", nom_y, "\n\n")
+  
+  if (inherits(X, "Date") || inherits(X, "POSIXct")) X <- as.numeric(X)
+  if (inherits(Y, "Date") || inherits(Y, "POSIXct")) Y <- as.numeric(Y)
+  
+  unidad_x <- if (nom_x %in% names(unidades)) paste0(" (", unidades[[nom_x]], ")") else ""
+  unidad_y <- if (nom_y %in% names(unidades)) paste0(" (", unidades[[nom_y]], ")") else ""
+  
+  # NUMERIC vs NUMERIC
+  if (is.numeric(X) && is.numeric(Y)) {
+    
+    df <- data.frame(x = X, y = Y) %>% tidyr::drop_na()
+    
+    if (nrow(df) > 1) {
+      corr <- cor(df$x, df$y, use = "complete.obs")
+      
+      cat("**Type:** Numeric vs Numeric  \n")
+      cat("**Pearson correlation:**", round(corr, 4), "\n\n")
+      
+      resumen <- data.frame(
+        Statistic = c("N complete cases", "Mean X", "Mean Y", "SD X", "SD Y"),
+        Value = c(
+          nrow(df),
+          round(mean(df$x, na.rm = TRUE), 2),
+          round(mean(df$y, na.rm = TRUE), 2),
+          round(sd(df$x, na.rm = TRUE), 2),
+          round(sd(df$y, na.rm = TRUE), 2)
+        )
+      )
+      
+      print(knitr::kable(
+        resumen,
+        caption = paste("Basic summary of", nom_x, "and", nom_y),
+        row.names = FALSE
+      ))
+      
+      p1 <- ggplot(df, aes(x = x, y = y)) +
+        geom_point(alpha = 0.4, color = "steelblue") +
+        geom_smooth(method = "lm", se = TRUE, color = "darkred") +
+        labs(
+          title = paste("Scatterplot of", nom_x, "vs", nom_y),
+          x = paste0(nom_x, unidad_x),
+          y = paste0(nom_y, unidad_y)
+        ) +
+        theme_minimal()
+      
+      p2 <- ggplot(df, aes(x = x, y = y)) +
+        geom_bin2d() +
+        labs(
+          title = paste("Bivariate density of", nom_x, "vs", nom_y),
+          x = paste0(nom_x, unidad_x),
+          y = paste0(nom_y, unidad_y)
+        ) +
+        theme_minimal()
+      
+      gridExtra::grid.arrange(p1, p2, ncol = 2)
+      
+    } else {
+      cat("Not enough non-missing observations to analyse this pair.\n\n")
+    }
+    
+  # CATEGORICAL vs NUMERIC
+  } else if ((is.factor(X) || is.character(X) || is.logical(X)) && is.numeric(Y)) {
+    
+    if (is.logical(X)) X <- as.factor(X)
+    
+    df <- data.frame(x = as.factor(X), y = Y) %>% tidyr::drop_na()
+    
+    if (nrow(df) > 0) {
+      cat("**Type:** Categorical vs Numeric  \n\n")
+      
+      resumen_cat <- df %>%
+        dplyr::group_by(x) %>%
+        dplyr::summarise(
+          n = dplyr::n(),
+          Mean = round(mean(y, na.rm = TRUE), 2),
+          Median = round(median(y, na.rm = TRUE), 2),
+          SD = round(sd(y, na.rm = TRUE), 2),
+          .groups = "drop"
+        ) %>%
+        dplyr::arrange(desc(Mean))
+      
+      print(knitr::kable(
+        resumen_cat,
+        caption = paste("Summary of", nom_y, "by", nom_x),
+        row.names = FALSE
+      ))
+      
+      p1 <- ggplot(df, aes(x = x, y = y, fill = x)) +
+        geom_boxplot(alpha = 0.7, na.rm = TRUE) +
+        labs(
+          title = paste("Boxplot of", nom_y, "by", nom_x),
+          x = nom_x,
+          y = paste0(nom_y, unidad_y)
+        ) +
+        theme_minimal() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+        guides(fill = "none")
+      
+      p2 <- ggplot(resumen_cat, aes(x = reorder(x, Mean), y = Mean, fill = x)) +
+        geom_col() +
+        labs(
+          title = paste("Mean", nom_y, "by", nom_x),
+          x = nom_x,
+          y = paste0("Mean ", nom_y, unidad_y)
+        ) +
+        theme_minimal() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+        guides(fill = "none")
+      
+      gridExtra::grid.arrange(p1, p2, ncol = 2)
+      
+    } else {
+      cat("Not enough non-missing observations to analyse this pair.\n\n")
+    }
+    
+  # NUMERIC vs CATEGORICAL
+  } else if (is.numeric(X) && (is.factor(Y) || is.character(Y) || is.logical(Y))) {
+    
+    if (is.logical(Y)) Y <- as.factor(Y)
+    
+    df <- data.frame(x = X, y = as.factor(Y)) %>% tidyr::drop_na()
+    
+    if (nrow(df) > 0) {
+      cat("**Type:** Numeric vs Categorical  \n\n")
+      
+      resumen_cat <- df %>%
+        dplyr::group_by(y) %>%
+        dplyr::summarise(
+          n = dplyr::n(),
+          Mean = round(mean(x, na.rm = TRUE), 2),
+          Median = round(median(x, na.rm = TRUE), 2),
+          SD = round(sd(x, na.rm = TRUE), 2),
+          .groups = "drop"
+        ) %>%
+        dplyr::arrange(desc(Mean))
+      
+      print(knitr::kable(
+        resumen_cat,
+        caption = paste("Summary of", nom_x, "by", nom_y),
+        row.names = FALSE
+      ))
+      
+      p1 <- ggplot(df, aes(x = y, y = x, fill = y)) +
+        geom_boxplot(alpha = 0.7, na.rm = TRUE) +
+        labs(
+          title = paste("Boxplot of", nom_x, "by", nom_y),
+          x = nom_y,
+          y = paste0(nom_x, unidad_x)
+        ) +
+        theme_minimal() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+        guides(fill = "none")
+      
+      p2 <- ggplot(resumen_cat, aes(x = reorder(y, Mean), y = Mean, fill = y)) +
+        geom_col() +
+        labs(
+          title = paste("Mean", nom_x, "by", nom_y),
+          x = nom_y,
+          y = paste0("Mean ", nom_x, unidad_x)
+        ) +
+        theme_minimal() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+        guides(fill = "none")
+      
+      gridExtra::grid.arrange(p1, p2, ncol = 2)
+      
+    } else {
+      cat("Not enough non-missing observations to analyse this pair.\n\n")
+    }
+    
+  # CATEGORICAL vs CATEGORICAL
+  } else if ((is.factor(X) || is.character(X) || is.logical(X)) &&
+             (is.factor(Y) || is.character(Y) || is.logical(Y))) {
+    
+    if (is.logical(X)) X <- as.factor(X)
+    if (is.logical(Y)) Y <- as.factor(Y)
+    
+    df <- data.frame(x = as.factor(X), y = as.factor(Y)) %>% tidyr::drop_na()
+    
+    if (nrow(df) > 0) {
+      cat("**Type:** Categorical vs Categorical  \n\n")
+      
+      tabla <- table(df$x, df$y, useNA = "ifany")
+      print(knitr::kable(
+        as.data.frame.matrix(tabla),
+        caption = paste("Contingency table:", nom_x, "vs", nom_y)
+      ))
+      
+      df_tab <- as.data.frame(tabla)
+      colnames(df_tab) <- c("X", "Y", "Freq")
+      
+      p1 <- ggplot(df_tab, aes(x = X, y = Y, fill = Freq)) +
+        geom_tile() +
+        geom_text(aes(label = Freq), size = 3) +
+        labs(
+          title = paste("Heatmap of", nom_x, "vs", nom_y),
+          x = nom_x,
+          y = nom_y
+        ) +
+        theme_minimal() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      
+      print(p1)
+      
+    } else {
+      cat("Not enough non-missing observations to analyse this pair.\n\n")
+    }
+    
+  } else {
+    cat("Type of combination not contemplated.\n\n")
+  }
+  
+  clave <- paste0(nom_x, "__", nom_y)
+  clave_inv <- paste0(nom_y, "__", nom_x)
+  
+  if (clave %in% names(comentarios_bivariantes)) {
+    cat("\n\n**Interpretation:** ", comentarios_bivariantes[[clave]], "\n\n")
+  } else if (clave_inv %in% names(comentarios_bivariantes)) {
+    cat("\n\n**Interpretation:** ", comentarios_bivariantes[[clave_inv]], "\n\n")
+  }
+  
+  cat("\n\n---\n\n")
+}
+
+vars <- names(dd)
+
+for (i in 1:(length(vars) - 1)) {
+  for (j in (i + 1):length(vars)) {
+    analisis(dd[[vars[i]]], dd[[vars[j]]], vars[i], vars[j])
+  }
+}
+```
+
+## Correlation Matrix of Numeric Variables
+
+```{r correlations, fig.width=9, fig.height=7}
+vars_num <- names(dd)[sapply(dd, is.numeric)]
+
+if (length(vars_num) > 1) {
+  cor_mat <- cor(dd[, vars_num], use = "pairwise.complete.obs")
+  
+  corr_df <- as.data.frame(as.table(cor_mat))
+  colnames(corr_df) <- c("Var1", "Var2", "Correlation")
+  
+  ggplot(corr_df, aes(x = Var1, y = Var2, fill = Correlation)) +
+    geom_tile() +
+    geom_text(aes(label = round(Correlation, 2)), size = 3) +
+    scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+    labs(title = "Correlation Matrix") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+```
+
+## Main Findings from the Bivariate Analysis
+
+The bivariate analysis highlights several relevant patterns in the dataset.
+
+Distance-related variables such as travelDistance and segmentDistance show a moderate association with ticket price, suggesting that route length plays an important role in fare formation. 
+
+Categorical variables such as airline, origin airport, and destination airport also introduce clear differences in price distributions, reflecting heterogeneous market conditions and airline strategies.
+
+Finally, structural variables such as layoverNumber and nonStop provide additional insight into itinerary design and its relationship with ticket prices.
