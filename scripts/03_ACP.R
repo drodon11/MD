@@ -4,6 +4,7 @@
 # Paquetes
 library(dplyr)
 library(ggplot2)
+library(factoextra)
 
 # Cargamos el rds después del preprocessing
 input_path <- file.path(getwd(), "data", "interim", "flightprices_preprocessed.rds")
@@ -15,6 +16,12 @@ dcon <- dd[, varNum]
 
 cat("Variables numéricas usadas en el PCA:\n")
 print(names(dcon))
+
+# Estandarizar (media 0, sd 1)
+dcon_scaled <- scale(dcon)
+
+as_tibble(head(dcon)) %>% print(n=6)
+apply(dcon_scaled, 2, sd)
 
 pca <- prcomp(dcon, center = TRUE, scale. = TRUE)
 
@@ -69,4 +76,12 @@ scores <- pca$x
 print(head(scores[, 1:4]))
 
 # biplot
-biplot(pca, cex = c(0.5, 0.7), main = "Biplot PCA (PC1 vs PC2)")
+biplot <- fviz_pca_biplot(pca, 
+                                     geom.ind = "point",   
+                                     col.ind = "black",    
+                                     alpha.ind = 0.2,      
+                                     col.var = "red",      
+                                     repel = TRUE,         
+                                     title = "Biplot PCA (PC1 vs PC2")
+
+print(biplot)
