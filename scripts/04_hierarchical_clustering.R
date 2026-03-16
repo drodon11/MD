@@ -41,6 +41,7 @@ cat("\n--- 10b. Calculando Distancia de Gower y Método de Ward ---\n")
 
 # Métrica: Disimilitud de Gower (la indicada para datos mixtos: numéricos y factores)
 mat_dist <- daisy(dd_clust, metric = "gower")
+mat_dist <- mat_dist^2
 
 # Agregación: Método de Ward (ward.D2), que minimiza la varianza intra-clúster
 res_hc <- hclust(mat_dist, method = "ward.D2")
@@ -58,7 +59,12 @@ plot(res_hc, main = "Dendrograma de Vuelos (Métrica: Gower, Agregación: Ward)"
 # ------------------------------------------------------------------------------
 # Validación matemática de k mediante el Coeficiente de Silueta
 # ------------------------------------------------------------------------------
-cat("\n--- Evaluando k=3 vs k=4 con el Coeficiente de Silueta ---\n")
+cat("\n--- Evaluando diferentes k con el Coeficiente de Silueta ---\n")
+
+# Calculamos la silueta para k=2
+grupos_k2 <- cutree(res_hc, k = 2)
+sil_k2 <- silhouette(grupos_k2, mat_dist)
+media_k2 <- summary(sil_k2)$avg.width
 
 # Calculamos la silueta para k=3
 grupos_k3 <- cutree(res_hc, k = 3)
@@ -70,8 +76,15 @@ grupos_k4 <- cutree(res_hc, k = 4)
 sil_k4 <- silhouette(grupos_k4, mat_dist)
 media_k4 <- summary(sil_k4)$avg.width
 
+# Calculamos la silueta para k=5
+grupos_k5 <- cutree(res_hc, k = 5)
+sil_k5 <- silhouette(grupos_k5, mat_dist)
+media_k5 <- summary(sil_k5)$avg.width
+
+cat("Silueta media para k = 2:", media_k2, "\n")
 cat("Silueta media para k = 3:", media_k3, "\n")
 cat("Silueta media para k = 4:", media_k4, "\n")
+cat("Silueta media para k = 5:", media_k5, "\n")
 
 # ------------------------------------------------------------------------------
 # 10d. Discusión del número final de clústeres
