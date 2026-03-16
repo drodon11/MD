@@ -27,7 +27,7 @@ apply(dcon_scaled, 2, sd)
 # AJUSTE DEL ACP
 
 #prcomp usa SVD; center=TRUE, scale.=TRUE también estandariza internamente
-pca <- prcomp(dcon, center = TRUE, scale. = TRUE)
+pca <- prcomp(dcon_scaled, center = TRUE, scale. = TRUE)
 
 #variancia explicada
 var_exp <- pca$sdev^2
@@ -75,7 +75,7 @@ print(plot_acumulada)
 
 #revisamos cómo contribuyen las variables originales a los 2 primeros componentes
 k <- which(cum_exp_ratio >= 0.80)[1]
-cat("\n--- Loadings (Pesos de las variables en PC1 y PC2) ---\n")
+cat("\n--- Loadings (Pesos de las variables en PC1, PC2, PC3 y PC4) ---\n")
 loadings <- pca$rotation[, 1:4]
 print(round(loadings, 3))
 
@@ -116,3 +116,4 @@ print(head(df_model))
   # Ángulos pequeños entre vectores: variables CORRELACIONADAS
   # Puntos (observaciones) próximos: perfiles similares en variables originales
   # Signo de la carga: dirrección de la relación con el componente
+
