@@ -96,3 +96,4 @@ print(tabla_tamanos)
 # Guardamos el dataset final con los clústeres para usarlo posteriormente
 saveRDS(dd_clust, file.path(getwd(), "data", "interim", "flightprices_clustered.rds"))
 cat("\nClustering finalizado y guardado en flightprices_clustered.rds\n")
+
