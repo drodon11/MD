@@ -128,45 +128,31 @@ analisis <- function(X, Y, nom_x, nom_y) {
   
   cat("\n\n### Variable:", nom_x, "vs", nom_y, "\n\n")
   
-  # Convert dates to numeric in order to analyze them
-  if (inherits(X, "Date") || inherits(X, "POSIXct")) {
-    X <- as.numeric(X)
-  }
+  # --- PASO 1: Guardamos si originalmente eran fechas ---
+  es_fecha_x <- inherits(X, "Date") || inherits(X, "POSIXct")
+  es_fecha_y <- inherits(Y, "Date") || inherits(Y, "POSIXct")
   
-  if (inherits(Y, "Date") || inherits(Y, "POSIXct")) {
-    Y <- as.numeric(Y)
-  }
+  # Convertimos a numérico para cálculos matemáticos
+  if (es_fecha_x) X <- as.numeric(X)
+  if (es_fecha_y) Y <- as.numeric(Y)
   
-  # NUMERIC vs NUMERIC
+  # --- CASO: NUMERIC vs NUMERIC ---
   if (is.numeric(X) && is.numeric(Y)) {
-    
     df <- data.frame(x = X, y = Y) %>% tidyr::drop_na()
-    
     if (nrow(df) > 1) {
       corr <- cor(df$x, df$y, use = "complete.obs")
-      
       cat("**Pearson correlation** =", round(corr, 4), "\n\n")
-      
       p <- ggplot(df, aes(x = x, y = y)) +
         geom_point(alpha = 0.4, color = "steelblue") +
         geom_smooth(method = "lm", se = TRUE, color = "darkred") +
-        labs(
-          title = paste("Relationship between", nom_x, "and", nom_y),
-          x = nom_x,
-          y = nom_y
-        ) +
+        labs(title = paste("Relationship between", nom_x, "and", nom_y), x = nom_x, y = nom_y) +
         theme_minimal()
-      
       print(p)
-    } else {
-      cat("There are not enough non-missing data to analyze this combination.\n\n")
     }
     
-  # CATEGORICAL vs NUMERIC
+  # --- CASO: CATEGORICAL (X) vs NUMERIC (Y) ---
   } else if ((is.factor(X) || is.character(X) || is.logical(X)) && is.numeric(Y)) {
-    
     if (is.logical(X)) X <- as.factor(X)
-    
     df <- data.frame(x = as.factor(X), y = Y) %>% tidyr::drop_na()
     
     if (nrow(df) > 0) {
@@ -174,39 +160,34 @@ analisis <- function(X, Y, nom_x, nom_y) {
         dplyr::group_by(x) %>%
         dplyr::summarise(
           n = dplyr::n(),
-          mean = round(mean(y, na.rm = TRUE), 2),
-          median = round(median(y, na.rm = TRUE), 2),
-          sd = round(sd(y, na.rm = TRUE), 2),
+          mean = mean(y, na.rm = TRUE),
+          median = median(y, na.rm = TRUE),
+          sd = sd(y, na.rm = TRUE),
           .groups = "drop"
         )
       
-      print(knitr::kable(
-        resumen_cat,
-        caption = paste("Summary of", nom_y, "by", nom_x),
-        row.names = FALSE
-      ))
+      # --- PASO 2: Si era fecha, convertimos la media y mediana de vuelta a Date ---
+      if (es_fecha_y) {
+        resumen_cat$mean <- as.Date(resumen_cat$mean, origin = "1970-01-01")
+        resumen_cat$median <- as.Date(resumen_cat$median, origin = "1970-01-01")
+      } else {
+        resumen_cat$mean <- round(resumen_cat$mean, 2)
+        resumen_cat$median <- round(resumen_cat$median, 2)
+      }
+      resumen_cat$sd <- round(resumen_cat$sd, 2)
+      
+      print(knitr::kable(resumen_cat, caption = paste("Summary of", nom_y, "by", nom_x), row.names = FALSE))
       
       p <- ggplot(df, aes(x = x, y = y, fill = x)) +
         geom_boxplot(alpha = 0.7, na.rm = TRUE) +
-        labs(
-          title = paste(nom_y, "by", nom_x),
-          x = nom_x,
-          y = nom_y
-        ) +
-        theme_minimal() +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-        guides(fill = "none")
-      
+        labs(title = paste(nom_y, "by", nom_x), x = nom_x, y = nom_y) +
+        theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + guides(fill = "none")
       print(p)
-    } else {
-      cat("There are not enough non-missing data to analyze this combination.\n\n")
     }
-    
-  # NUMERIC vs CATEGORICAL
+
+  # --- CASO: NUMERIC (X) vs CATEGORICAL (Y) ---
   } else if (is.numeric(X) && (is.factor(Y) || is.character(Y) || is.logical(Y))) {
-    
     if (is.logical(Y)) Y <- as.factor(Y)
-    
     df <- data.frame(x = X, y = as.factor(Y)) %>% tidyr::drop_na()
     
     if (nrow(df) > 0) {
@@ -214,67 +195,51 @@ analisis <- function(X, Y, nom_x, nom_y) {
         dplyr::group_by(y) %>%
         dplyr::summarise(
           n = dplyr::n(),
-          mean = round(mean(x, na.rm = TRUE), 2),
-          median = round(median(x, na.rm = TRUE), 2),
-          sd = round(sd(x, na.rm = TRUE), 2),
+          mean = mean(x, na.rm = TRUE),
+          median = median(x, na.rm = TRUE),
+          sd = sd(x, na.rm = TRUE),
           .groups = "drop"
         )
       
-      print(knitr::kable(
-        resumen_cat,
-        caption = paste("Summary of", nom_x, "by", nom_y),
-        row.names = FALSE
-      ))
+      # --- PASO 3: Si era fecha, convertimos la media y mediana de vuelta a Date ---
+      if (es_fecha_x) {
+        resumen_cat$mean <- as.Date(resumen_cat$mean, origin = "1970-01-01")
+        resumen_cat$median <- as.Date(resumen_cat$median, origin = "1970-01-01")
+      } else {
+        resumen_cat$mean <- round(resumen_cat$mean, 2)
+        resumen_cat$median <- round(resumen_cat$median, 2)
+      }
+      resumen_cat$sd <- round(resumen_cat$sd, 2)
+      
+      print(knitr::kable(resumen_cat, caption = paste("Summary of", nom_x, "by", nom_y), row.names = FALSE))
       
       p <- ggplot(df, aes(x = y, y = x, fill = y)) +
         geom_boxplot(alpha = 0.7, na.rm = TRUE) +
-        labs(
-          title = paste(nom_x, "by", nom_y),
-          x = nom_y,
-          y = nom_x
-        ) +
-        theme_minimal() +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-        guides(fill = "none")
-      
+        labs(title = paste(nom_x, "by", nom_y), x = nom_y, y = nom_x) +
+        theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + guides(fill = "none")
       print(p)
-    } else {
-      cat("There are not enough non-missing data to analyze this combination.\n\n")
     }
-    
-  # CATEGORICAL vs CATEGORICAL
+
+  # --- CASO: CATEGORICAL vs CATEGORICAL ---
   } else if ((is.factor(X) || is.character(X) || is.logical(X)) &&
              (is.factor(Y) || is.character(Y) || is.logical(Y))) {
-    
     if (is.logical(X)) X <- as.factor(X)
     if (is.logical(Y)) Y <- as.factor(Y)
-    
     df <- data.frame(x = as.factor(X), y = as.factor(Y)) %>% tidyr::drop_na()
-    
     if (nrow(df) > 0) {
       tabla <- table(df$x, df$y, useNA = "ifany")
-      
-      print(knitr::kable(
-        as.data.frame.matrix(tabla),
-        caption = paste("Contingency table:", nom_x, "vs", nom_y)
-      ))
-    } else {
-      cat("There are not enough non-missing data to analyze this combination.\n\n")
+      print(knitr::kable(as.data.frame.matrix(tabla), caption = paste("Contingency table:", nom_x, "vs", nom_y)))
     }
-    
-  } else {
-    cat("Type of combination not considered.\n\n")
   }
-  
+
+  # Interpretación de los comentarios (esto se mantiene igual)
   clave <- paste0(nom_x, "__", nom_y)
   clave_inv <- paste0(nom_y, "__", nom_x)
-  
   if (clave %in% names(comentarios_bivariantes)) {
     cat("\n\n**Interpretation:** ", comentarios_bivariantes[[clave]], "\n\n")
   } else if (clave_inv %in% names(comentarios_bivariantes)) {
     cat("\n\n**Interpretation:** ", comentarios_bivariantes[[clave_inv]], "\n\n")
   }
-  
   cat("\n\n---\n\n")
 }
 
