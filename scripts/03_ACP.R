@@ -74,6 +74,7 @@ print(plot_acumulada)
 # CARGAS (loadings) Y SCORES
 
 #revisamos cómo contribuyen las variables originales a los 2 primeros componentes
+k <- which(cum_exp_ratio >= 0.80)[1]
 cat("\n--- Loadings (Pesos de las variables en PC1 y PC2) ---\n")
 loadings <- pca$rotation[, 1:4]
 print(round(loadings, 3))
@@ -87,24 +88,28 @@ biplot(pca, cex = c(0.5, 0.7), main = "Biplot PCA (PC1 vs PC2)")
 # PROYECCIÓN Y RECONSTRUCCIÓN
 
 #proyectar datos a k componentes
-k <- which(cum_exp_ratio >= 0.80)[1]
 scores_k <- pca$x[, 1:k, drop = FALSE]
 
 #reconstrucción aproximada (desde scores_k -> espacio original estandarizado)
 Xstd_hat <- scores_k %*% t(pca$rotation[, 1:k])
 
 #"desestandarizar" para volver a escala original
-means <- attr(df_scaled, "scaled:center")
-sds <- attr(df_scaled, "scaled:scale")
+means <- attr(dcon_scaled, "scaled:center")
+sds <- attr(dcon_scaled, "scaled:scale")
 Xrec <- sweep(Xstd_hat, 2, sds, `*`)
 Xrec <- sweep(Xrec, 2, means, `+`)
 
 cat("\n--- Datos Reconstruidos (primeras 6 filas) ---\n")
 as_tibble(head(Xrec))
 
-# pipeline para uso en modelos
+# PIPELINE PARA EL USO DE MODELOS
 
+pc_df <- as.data.frame(pca$x[, 1:k])
+varCat <- which(!sapply(dd, is.numeric))
+df_model <- cbind(pc_df, dd[, varCat, drop=FALSE])
 
+cat("\n--- Dataset listo ---\n")
+print(head(df_model))
 
 # interpretación de cargas y biplot
   # Vectores largos: variables con alta contribución al componente
