@@ -3,18 +3,112 @@
 # ==============================================================================
 
 # Instalación y carga de paquetes necesarios
-list.of.packages <- c("cluster", "dplyr") 
+list.of.packages <- c("dplyr", "fpc", "reshape2", "tidyr", "ggplot2", "stats", 
+                      "cluster", "factoextra", "colorspace", "patchwork", 
+                      "tidyverse", "ggpubr", "NbClust", "HDclassif", "clustMixType", 
+                      "clusterSim", "pracma", "DataVisualizations", "entropy",
+                      "clevr", "dendextend", "ggdendro", "gridExtra") 
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages) > 0) install.packages(new.packages)
 
 library(cluster)
 library(dplyr)
+library(ggplot2)
+library(ggdendro)
 
 # ------------------------------------------------------------------------------
 # Carga de datos
 # ------------------------------------------------------------------------------
 input_path <- file.path(getwd(), "data", "interim", "flightprices_interim.rds")
 dd <- readRDS(input_path)
+
+# ------------------------------------------------------------------------------
+# CLUSTERING JERÁRQUICO (solamente variables numéricas)
+# ------------------------------------------------------------------------------
+
+# 1 - extraer las variabes numéricas del dataset original
+cat("\n--- Extrayendo las variables numéricas del dataset original ---\n")
+varNum <- which(sapply(dd, is.numeric))
+dd_num <- dd[, varNum]
+
+# 2 - escalar los datos numéricos (media 0, desviación típica 1)
+cat("\n--- Escalando los datos numéricos ---\n")
+dd_num_scaled <- scale(dd_num)
+
+# 3 - calcular la matriz de distancias usando la dist. euclideana
+cat("\n--- Calculando la matriz de distancias usando la dist. euclideana ---\n")
+distancia_Euc<- dist(dd_num_scaled, method="euclidean")
+
+# 4 - agrupación single (une grupos a partir de la menor distancia entre elementos de ambos clusters)
+# Suele producir el efecto de encadenamiento
+cat("\n--- Realizando agrupación single ---\n")
+agr_Single <- hclust(distancia_Euc, method="single")
+
+# 5 - agrupación complete (usa la mayor distancia entre elementos de dos grupos)
+# Tiende a formar clusters más compactos
+cat("\n--- Realizando agrupación complete ---\n")
+agr_Complete <- hclust(distancia_Euc, method="complete")
+
+# 6 - enlace promedio (toma la distancia media entre todos los pares de observaciones de dos clusters)
+# Compromiso habitual entre el 'single' y 'complete'
+cat("\n--- Realizando agrupación average ---\n")
+agr_Average <- hclust(distancia_Euc, method="average")
+
+# 7 - Mcquitty (actualiza las distancias entre clusters promediando de forma recursiva según las fusiones previas)
+cat("\n--- Realizando agrupación mcquitty ---\n")
+agr_Mcquitty <- hclust(distancia_Euc, method="mcquitty")
+
+# 8 - Criterio Median (calcula las distancias a partir de centroides corregidos y puede verse afectado por inversiones en el dendograma)
+cat("\n--- Realizando agrupación median ---\n")
+agr_Median <- hclust(distancia_Euc, method="median")
+
+# 9 - Centroide (depende de la distancia entre centroides de clusters)
+# Es intuitivo, aunque no siempre conserva bien la estructura jerárquica
+cat("\n--- Realizando agrupación centroide ---\n")
+agr_Centroid <- hclust(distancia_Euc, method="centroid")
+
+# 10 - Ward.D o Ward.D2 (minimiza el incremento de variabilidad interna en cada fusión)
+# Suele producir grupos compactos y bien separados --> método más usado
+cat("\n--- Realizando agrupación Ward ---\n")
+agr_Ward <- hclust(distancia_Euc, method="ward.D2")
+
+# 11 - Representación del dendograma de Ward
+# Para inspeccionar visualmente posibles cortes del árbol
+cat("\n--- Representación del dendograma de Ward ---\n")
+plot(agr_Ward, main="H.Clustering with euclidean distance and WARD method")
+rect.hclust(agr_Ward, k=3, border=3)
+
+# Por si queremos hacer la representación de todos los dendogramas en una sola imagen
+cat("\n--- Representación de todos los dendogramas realizados ---\n")
+### Función para convertir hclust a ggplot
+plot_dendrogram <- function(hclust_obj, method_name) {
+  dendro_data <- ggdendro::dendro_data(hclust_obj)
+  
+  ggplot(ggdendro::segment(dendro_data)) +
+    geom_segment(aes(x = x, y = y, xend = xend, yend = yend)) +
+    theme_minimal() +
+    ggtitle(method_name) +
+    theme(
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      axis.title = element_blank(),
+      panel.grid = element_blank()
+    )
+}
+
+### Lista de dendrogramas con nombres
+dendograms <- list(
+  plot_dendrogram(agr_Single, "Single"),
+  plot_dendrogram(agr_Complete, "Complete"),
+  plot_dendrogram(agr_Average, "Average"),
+  plot_dendrogram(agr_Mcquitty, "McQuitty"),
+  plot_dendrogram(agr_Median, "Median"),
+  plot_dendrogram(agr_Centroid, "Centroid"),
+  plot_dendrogram(agr_Ward, "Ward.D2")
+)
+
+# mostrar todos los dendogramas
+gridExtra::grid.arrange(grobs = dendograms, ncol = 3)
 
 # ------------------------------------------------------------------------------
 # 10a. Descripción precisa de los datos usados
@@ -57,11 +151,40 @@ plot(res_hc, main = "Dendrograma de Vuelos (Métrica: Gower, Agregación: Ward)"
      xlab = "Vuelos", sub = "", ylab = "Distancia (Inercia)", cex = 0.5)
 
 # ------------------------------------------------------------------------------
+# Validación matemática de k mediante el Coeficiente de Silueta
+# ------------------------------------------------------------------------------
+cat("\n--- Evaluando diferentes k con el Coeficiente de Silueta ---\n")
+
+# Calculamos la silueta para k=2
+grupos_k2 <- cutree(res_hc, k = 2)
+sil_k2 <- silhouette(grupos_k2, mat_dist)
+media_k2 <- summary(sil_k2)$avg.width
+
+# Calculamos la silueta para k=3
+grupos_k3 <- cutree(res_hc, k = 3)
+sil_k3 <- silhouette(grupos_k3, mat_dist)
+media_k3 <- summary(sil_k3)$avg.width
+
+# Calculamos la silueta para k=4
+grupos_k4 <- cutree(res_hc, k = 4)
+sil_k4 <- silhouette(grupos_k4, mat_dist)
+media_k4 <- summary(sil_k4)$avg.width
+
+# Calculamos la silueta para k=5
+grupos_k5 <- cutree(res_hc, k = 5)
+sil_k5 <- silhouette(grupos_k5, mat_dist)
+media_k5 <- summary(sil_k5)$avg.width
+
+cat("Silueta media para k = 2:", media_k2, "\n")
+cat("Silueta media para k = 3:", media_k3, "\n")
+cat("Silueta media para k = 4:", media_k4, "\n")
+cat("Silueta media para k = 5:", media_k5, "\n")
+
+# ------------------------------------------------------------------------------
 # 10d. Discusión del número final de clústeres
 # ------------------------------------------------------------------------------
-# Tras observar los saltos de inercia en el dendrograma, definimos el punto de corte.
-# Usamos 3 clusters para poder discriminar mejor, 2 es poco.
-
+# Tras observar los saltos de inercia en el dendrograma y usando el
+# método de Silhouette, definimos el punto de corte.
 k_elegido <- 3
 
 # Dibujamos las fronteras de los grupos en el dendrograma para visualizar el corte
