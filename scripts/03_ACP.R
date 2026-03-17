@@ -4,6 +4,7 @@
 # Paquetes
 library(dplyr)
 library(ggplot2)
+library(factoextra)
 
 # Cargamos el rds después del preprocessing
 input_path <- file.path(getwd(), "data", "interim", "flightprices_preprocessed.rds")
@@ -18,6 +19,14 @@ print(names(dcon))
 
 # Estandarizar (media 0, sd 1)
 dcon_scaled <- scale(dcon)
+<<<<<<< HEAD
+=======
+
+as_tibble(head(dcon)) %>% print(n=6)
+apply(dcon_scaled, 2, sd)
+
+pca <- prcomp(dcon, center = TRUE, scale. = TRUE)
+>>>>>>> main
 
 # Vista rápida
 as_tibble(head(dcon)) %>% print(n=6)
@@ -83,6 +92,7 @@ scores <- pca$x
 print(head(scores[, 1:4]))
 
 # biplot
+<<<<<<< HEAD
 biplot(pca, cex = c(0.5, 0.7), main = "Biplot PCA (PC1 vs PC2)")
 
 # PROYECCIÓN Y RECONSTRUCCIÓN
@@ -117,3 +127,14 @@ print(head(df_model))
   # Puntos (observaciones) próximos: perfiles similares en variables originales
   # Signo de la carga: dirrección de la relación con el componente
 
+=======
+biplot <- fviz_pca_biplot(pca, 
+                                     geom.ind = "point",   
+                                     col.ind = "black",    
+                                     alpha.ind = 0.2,      
+                                     col.var = "red",      
+                                     repel = TRUE,         
+                                     title = "Biplot PCA (PC1 vs PC2")
+
+print(biplot)
+>>>>>>> main
