@@ -158,6 +158,21 @@ dendograms <- list(
 # mostrar todos los dendogramas
 gridExtra::grid.arrange(grobs = dendograms, ncol = 3)
 
+# cálculo de correlaciones (cuánto mayor sea la correlación, mejor refleja el árbol la estructura aproximada de los datos)
+info <- data.frame(metricas = c("Single", "Complete", "Average", "McQuitty", "Median", 
+                                "Centroid", "Ward"), 
+                   correlaciones = c(cor(distancia_Euc, cophenetic(agr_Single)), 
+                                     cor(distancia_Euc, cophenetic(agr_Complete)), 
+                                     cor(distancia_Euc, cophenetic(agr_Average)), 
+                                     cor(distancia_Euc, cophenetic(agr_Mcquitty)), 
+                                     cor(distancia_Euc, cophenetic(agr_Median)), 
+                                     cor(distancia_Euc, cophenetic(agr_Centroid)), 
+                                     cor(distancia_Euc, cophenetic(agr_Ward))))
+
+(info <- info[order(info$correlaciones, decreasing = TRUE), ])
+
+
+
 # ------------------------------------------------------------------------------
 # CLUSTERING JERÁRQUICO (variables mixtas)
 # ------------------------------------------------------------------------------
