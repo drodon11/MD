@@ -1,5 +1,9 @@
 # ==============================================================================
+<<<<<<< HEAD
 #                             Clustering
+=======
+#                             Clustering Jerárquico
+>>>>>>> acda494fb808caf61b07cff5209d9a3af23e74cf
 # ==============================================================================
 
 # Instalación y carga de paquetes necesarios
@@ -15,6 +19,7 @@ library(cluster)
 library(dplyr)
 library(ggplot2)
 library(ggdendro)
+<<<<<<< HEAD
 library(factoextra)
 
 # ------------------------------------------------------------------------------
@@ -24,10 +29,25 @@ input_path <- file.path(getwd(), "data", "interim", "flightprices_preprocessed.r
 dd <- readRDS(input_path)
 
 # 1 - Extraer las variables numéricas del dataset original
+=======
+
+# ------------------------------------------------------------------------------
+# Carga de datos
+# ------------------------------------------------------------------------------
+input_path <- file.path(getwd(), "data", "interim", "flightprices_interim.rds")
+dd <- readRDS(input_path)
+
+# ------------------------------------------------------------------------------
+# CLUSTERING JERÁRQUICO (solamente variables numéricas)
+# ------------------------------------------------------------------------------
+
+# 1 - extraer las variabes numéricas del dataset original
+>>>>>>> acda494fb808caf61b07cff5209d9a3af23e74cf
 cat("\n--- Extrayendo las variables numéricas del dataset original ---\n")
 varNum <- which(sapply(dd, is.numeric))
 dd_num <- dd[, varNum]
 
+<<<<<<< HEAD
 # 2 - Escalar los datos numéricos (media 0, desviación típica 1)
 cat("\n--- Escalando los datos numéricos ---\n")
 dd_num_scaled <- scale(dd_num)
@@ -79,6 +99,8 @@ cat("\nModelo K-Means finalizado. Inercia explicada:",
 cat("\n--- Calculando la matriz de distancias usando la dist. euclideana ---\n")
 distancia_Euc <- dist(dd_num_scaled, method="euclidean")
 
+=======
+>>>>>>> acda494fb808caf61b07cff5209d9a3af23e74cf
 # 2 - escalar los datos numéricos (media 0, desviación típica 1)
 cat("\n--- Escalando los datos numéricos ---\n")
 dd_num_scaled <- scale(dd_num)
@@ -159,10 +181,13 @@ dendograms <- list(
 gridExtra::grid.arrange(grobs = dendograms, ncol = 3)
 
 # ------------------------------------------------------------------------------
+<<<<<<< HEAD
 # CLUSTERING JERÁRQUICO (variables mixtas)
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
+=======
+>>>>>>> acda494fb808caf61b07cff5209d9a3af23e74cf
 # 10a. Descripción precisa de los datos usados
 # ------------------------------------------------------------------------------
 cat("\n--- 10a. Preparando datos y ajustando variables ---\n")
@@ -254,4 +279,9 @@ print(tabla_tamanos)
 
 # Guardamos el dataset final con los clústeres para usarlo posteriormente
 saveRDS(dd_clust, file.path(getwd(), "data", "interim", "flightprices_clustered.rds"))
+<<<<<<< HEAD
 cat("\nClustering finalizado y guardado en flightprices_clustered.rds\n")
+=======
+cat("\nClustering finalizado y guardado en flightprices_clustered.rds\n")
+
+>>>>>>> acda494fb808caf61b07cff5209d9a3af23e74cf
