@@ -7,7 +7,7 @@ list.of.packages <- c("dplyr", "fpc", "reshape2", "tidyr", "ggplot2", "stats",
                       "cluster", "factoextra", "colorspace", "patchwork", 
                       "tidyverse", "ggpubr", "NbClust", "HDclassif", "clustMixType", 
                       "clusterSim", "pracma", "DataVisualizations", "entropy",
-                      "clevr", "dendextend", "ggdendro", "gridExtra", "mclust") 
+                      "clevr", "dendextend", "ggdendro", "gridExtra", "mclust", "clusterSim") 
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages) > 0) install.packages(new.packages)
 
@@ -17,6 +17,9 @@ library(ggplot2)
 library(ggdendro)
 library(factoextra)
 library(mclust)
+library(DataVisualizations)
+library(clusterSim)
+library(fpc)
 
 # ------------------------------------------------------------------------------
 # Carga de datos (CORREGIDO AL RDS PREPROCESADO)
@@ -241,6 +244,67 @@ info <- data.frame(metricas = c("Single", "Complete", "Average", "McQuitty", "Me
 sil <- cluster::silhouette(agr_Ward, dist(dd_num_scaled))
 avg_sil <- mean(sil[, 3])
 summary(sil)
+
+Silhouetteplot(as.matrix(dd_num_scaled), Cls = sil[, "cluster"], main='Silhouetteplot')
+
+# Índice Davies-Bouldin
+
+k_num <- 3
+grupos_hc_num <- cutree(agr_Ward, k = k_num)
+
+DB_index_hc <- clusterSim::index.DB(x = dd_num_scaled, cl = grupos_hc_num)
+cat("El Índice Davies-Bouldin para k =", k_num, "es:", round(DB_index_hc$DB, 4), "\n")
+
+DB_indexes_hc <- vector()
+
+for (k in 2:10) {
+  grupos_temp <- cutree(agr_Ward, k = k)
+  DB_temp <- clusterSim::index.DB(x = dd_num_scaled, cl = grupos_temp)
+  DB_indexes_hc[k] <- DB_temp$DB
+}
+
+DB_df_hc <- data.frame(k = 2:10, DB = DB_indexes_hc[2:10])
+
+plot_DB_hc <- ggplot(DB_df_hc, aes(x = k, y = DB)) + 
+  geom_point(color = "darkred", size = 3) + 
+  geom_line(color = "red") +
+  theme_minimal() +
+  scale_x_continuous(breaks = 2:10) +
+  labs(title = "Índice Davies-Bouldin (H. Clustering)",
+       subtitle = "Buscamos el valor mínimo o un 'codo' claro",
+       x = "Número de clústeres (k)", 
+       y = "Índice Davies-Bouldin (DB)")
+
+print(plot_DB_hc)
+
+# Índice de Calinski-Harabasz
+CH_index_hc <- fpc::calinhara(dd_num_scaled, grupos_hc_num)
+cat("El Índice Calinski-Harabasz para k =", k_num, "es:", round(CH_index_hc, 4), "\n")
+
+CH_indexes_hc <- vector()
+
+for (k in 2:10) {
+  grupos_temp <- cutree(agr_Ward, k = k)
+  CH_indexes_hc[k] <- fpc::calinhara(dd_num_scaled, grupos_temp)
+}
+
+CH_df_hc <- data.frame(k = 2:10, CH = CH_indexes_hc[2:10])
+
+plot_CH_hc <- ggplot(CH_df_hc, aes(x = k, y = CH)) + 
+  geom_point(color = "darkgreen", size = 3) + 
+  geom_line(color = "green4") +
+  theme_minimal() +
+  scale_x_continuous(breaks = 2:10) +
+  labs(title = "Índice Calinski-Harabasz (H. Clustering)",
+       subtitle = "Buscamos el valor MÁXIMO (pico más alto)",
+       x = "Número de clústeres (k)", 
+       y = "Índice Calinski-Harabasz (CH)")
+
+print(plot_CH_hc)
+
+# Entropía
+
+
 
 # Adjusted Rand Index (K-Means vs Jerárquico)
 grupos_jerarquico <- cutree(agr_Ward, k = 3)
