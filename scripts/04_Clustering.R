@@ -144,6 +144,10 @@ cat("\nModelo K-Means finalizado. Inercia explicada:",
 # CLUSTERING JERÁRQUICO (solamente variables numéricas)
 # ==============================================================================
 
+# ==============================================================================
+# CLUSTERING JERÁRQUICO (solamente variables numéricas)
+# ==============================================================================
+
 # 1 - Calcular la matriz de distancias usando la dist. euclideana
 cat("\n--- Calculando la matriz de distancias usando la dist. euclideana ---\n")
 distancia_Euc <- dist(dd_num_scaled, method="euclidean")
@@ -241,7 +245,8 @@ info <- data.frame(metricas = c("Single", "Complete", "Average", "McQuitty", "Me
 (info <- info[order(info$correlaciones, decreasing = TRUE), ])
 
 # Coeficiente de Silhouette
-sil <- cluster::silhouette(agr_Ward, dist(dd_num_scaled))
+grupos_hc_num <- cutree(agr_Ward, k = 3)
+sil <- cluster::silhouette(grupos_hc_num, dist(dd_num_scaled))
 avg_sil <- mean(sil[, 3])
 summary(sil)
 
@@ -311,7 +316,6 @@ grupos_jerarquico <- cutree(agr_Ward, k = 3)
 
 ari_algoritmos <- adjustedRandIndex(km_clusters$cluster, grupos_jerarquico)
 cat("ARI (K-Means vs Jerárquico):", round(ari_algoritmos, 4), "\n")
-
 # ------------------------------------------------------------------------------
 # CLUSTERING JERÁRQUICO (variables mixtas)
 # ------------------------------------------------------------------------------
