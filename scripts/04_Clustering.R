@@ -55,7 +55,15 @@ print(plot_sil_km)
 k_kmeans <- 3
 km_clusters <- kmeans(x = dd_num_scaled, centers = k_kmeans, nstart = 50, trace = FALSE)
 
-# C. Representación bidimensional del K-Means
+# C. Validación: Silueta individual
+sil <- silhouette(km_clusters$cluster, dist(dd_num_scaled))
+fviz_silhouette(sil) + labs(title = "Silhouette Analysis for k=3")
+
+# D. Validación: Calinski-Harabasz (Índice de separación)
+ch_index <- fpc::calinhara(dd_num_scaled, km_clusters$cluster)
+cat("\nCalinski-Harabasz Index:", ch_index, "\n")
+
+# E. Representación bidimensional del K-Means
 plot_kmeans <- fviz_cluster(
   list(data = dd_num_scaled, cluster = km_clusters$cluster), 
   ellipse.type = "norm",
