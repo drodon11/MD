@@ -7,7 +7,7 @@ list.of.packages <- c("dplyr", "fpc", "reshape2", "tidyr", "ggplot2", "stats",
                       "cluster", "factoextra", "colorspace", "patchwork", 
                       "tidyverse", "ggpubr", "NbClust", "HDclassif", "clustMixType", 
                       "clusterSim", "pracma", "DataVisualizations", "entropy",
-                      "clevr", "dendextend", "ggdendro", "gridExtra") 
+                      "clevr", "dendextend", "ggdendro", "gridExtra", "mclust") 
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages) > 0) install.packages(new.packages)
 
@@ -16,6 +16,7 @@ library(dplyr)
 library(ggplot2)
 library(ggdendro)
 library(factoextra)
+library(mclust)
 
 # ------------------------------------------------------------------------------
 # Carga de datos (CORREGIDO AL RDS PREPROCESADO)
@@ -63,7 +64,63 @@ fviz_silhouette(sil) + labs(title = "Silhouette Analysis for k=3")
 ch_index <- fpc::calinhara(dd_num_scaled, km_clusters$cluster)
 cat("\nCalinski-Harabasz Index:", ch_index, "\n")
 
-# E. Representación bidimensional del K-Means
+# E. SSE: Sum of Squared Errors
+(sse <- km_clusters$tot.withinss)
+
+# F. Método del codo
+sse <- c()
+for (k in 1:10) {
+  kmeans_model <- kmeans(dd_num_scaled, k)
+  sse[k] <- kmeans_model$tot.withinss
+}
+
+plot <- ggplot(data.frame(x = 1:10, y = sse), aes(x, y)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Number of clusters", y = "SSE", title = "Método del codo") 
+
+print(plot)
+
+# G. Método del gap estadístico
+gap_stat <- clusGap(dd_num_scaled, FUN = kmeans, nstart = 10, K.max = 10, B = 10)
+plot(gap_stat, main="Gap statistic plot")
+
+# H. Índice de Davies-Bouldin
+DB_index <- clusterSim::index.DB(dd_num_scaled, km_clusters$cluster)
+DB_index
+
+DB_indexes <- vector()
+for (k in 1:10) {
+  kmeans_result <- kmeans(dd_num_scaled, centers = k)
+  DB_index <- clusterSim::index.DB(dd_num_scaled, kmeans_result$cluster)
+  DB_indexes[k] <- DB_index$DB
+}
+
+DB_df <- data.frame(k = 1:10, DB = DB_indexes)
+ggplot(DB_df, aes(x = k, y = DB)) + geom_point() + geom_line()
+
+# I. Entropia
+cluster_labels <- km_clusters$cluster
+
+cluster_entropy <- entropy::entropy(table(cluster_labels))
+cluster_entropy <- sapply(unique(cluster_labels), function(i) entropy::entropy(cluster_labels == i))
+
+mean_entropy <- mean(cluster_entropy)
+mean_entropy
+
+entropy_values <- vector()
+for (k in 1:10) {
+  kmeans_result <- kmeans(dd_num_scaled, centers = k)
+  cluster_labels <- kmeans_result$cluster
+  cluster_entropy <- sapply(unique(cluster_labels), function(i) 
+    entropy::entropy(cluster_labels == i))
+  entropy_values[k] <- mean(cluster_entropy)
+}
+
+entropy_df <- data.frame(k = 1:10, entropy = entropy_values)
+ggplot(entropy_df, aes(x = k, y = entropy)) + geom_point() + geom_line()
+
+# J. Representación bidimensional del K-Means
 plot_kmeans <- fviz_cluster(
   list(data = dd_num_scaled, cluster = km_clusters$cluster), 
   ellipse.type = "norm",
@@ -73,6 +130,7 @@ plot_kmeans <- fviz_cluster(
   ggtheme = theme_classic(),
   main = "Proyección Espacial K-Means (k=3)"
 )
+
 print(plot_kmeans)
 
 cat("\nModelo K-Means finalizado. Inercia explicada:", 
@@ -179,7 +237,16 @@ info <- data.frame(metricas = c("Single", "Complete", "Average", "McQuitty", "Me
 
 (info <- info[order(info$correlaciones, decreasing = TRUE), ])
 
+# Coeficiente de Silhouette
+sil <- cluster::silhouette(agr_Ward, dist(dd_num_scaled))
+avg_sil <- mean(sil[, 3])
+summary(sil)
 
+# Adjusted Rand Index (K-Means vs Jerárquico)
+grupos_jerarquico <- cutree(agr_Ward, k = 3)
+
+ari_algoritmos <- adjustedRandIndex(km_clusters$cluster, grupos_jerarquico)
+cat("ARI (K-Means vs Jerárquico):", round(ari_algoritmos, 4), "\n")
 
 # ------------------------------------------------------------------------------
 # CLUSTERING JERÁRQUICO (variables mixtas)
