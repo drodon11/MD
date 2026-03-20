@@ -1,0 +1,286 @@
+---
+title: "Initial Analysis - Flight Prices"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+list.of.packages <- c(
+  "ggplot2", "dplyr", "visdat", "naniar", "DataExplorer",
+  "VIM", "tidyr", "knitr", "here"
+)
+
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[, "Package"])]
+
+if (length(new.packages) > 0) {
+  install.packages(new.packages, repos = "https://cloud.r-project.org")
+}
+
+invisible(lapply(list.of.packages, require, character.only = TRUE))
+```
+
+```{r load-cleaning}
+input_path <- here::here("data", "interim", "flightprices_preprocessed.rds")
+dd <- readRDS(input_path)
+```
+
+## General statistical summary
+
+```{r summary}
+resumen <- data.frame(
+  Variable = names(dd),
+  Type     = sapply(dd, function(x) class(x)[1]),
+  NAs      = sapply(dd, function(x) sum(is.na(x))),
+  Mean     = sapply(dd, function(x) if (is.numeric(x)) round(mean(x, na.rm = TRUE), 2) else "-"),
+  Median   = sapply(dd, function(x) if (is.numeric(x)) round(median(x, na.rm = TRUE), 2) else "-"),
+  SD       = sapply(dd, function(x) if (is.numeric(x)) round(sd(x, na.rm = TRUE), 2) else "-")
+)
+
+knitr::kable(resumen)
+```
+
+## Bivariate analysis
+
+```{r bivariate-analysis, results='asis', fig.width=10, fig.height=4}
+
+comentarios_bivariantes <- list(
+  "flightDate__totalPrice" = "The relationship between flight date and total price is weak and slightly negative. This suggests that calendar progression alone does not strongly explain fare levels in the processed dataset, although some seasonal or market effects may still exist.",
+
+  "flightDate__taxAmount" = "The association between flight date and tax amount is also weak. Taxes seem to depend much more on fare structure and itinerary characteristics than on the date itself.",
+
+  "flightDate__departure" = "The almost perfect association between flightDate and departure is structural rather than substantive, since departure already contains date-time information. This does not represent a meaningful behavioural relationship.",
+
+  "flightDate__arrival" = "As with departure, the near-perfect relationship between flightDate and arrival is expected because both variables encode calendar information. It should be interpreted as a structural property of the data.",
+
+  "elapsedDays__travelDistance" = "There is a moderate positive association between elapsedDays and travel distance. Flights arriving the following day tend to be longer, which is a coherent pattern for more demanding itineraries.",
+
+  "elapsedDays__totalPrice" = "The relationship between elapsedDays and total price is positive but weak. Overnight arrival may be associated with more complex or longer trips, but it is not one of the strongest determinants of fare.",
+
+  "elapsedDays__taxAmount" = "A weak positive association is observed between elapsedDays and taxAmount. This is consistent with longer or more complex itineraries generating slightly higher fees.",
+
+  "elapsedDays__nonStop" = "Flights with a layover tend to have higher elapsedDays than direct flights. This is logically consistent, since itineraries with stops are more likely to spill over into the next day.",
+
+  "taxAmount__totalPrice" = "This is one of the clearest relationships in the dataset. Higher ticket prices tend to be associated with higher taxes and fees, which is expected because taxAmount is closely linked to fare level.",
+
+  "taxAmount__travelDistance" = "A moderate positive relationship appears between taxAmount and travelDistance. Longer routes often imply higher airport fees, more complex itineraries, or higher fare levels.",
+
+  "taxAmount__layoverNumber" = "The positive relationship between taxAmount and layoverNumber suggests that more segmented itineraries tend to accumulate more taxes and fees.",
+
+  "totalPrice__travelDistance" = "A clear positive association exists between route distance and total price. This is one of the most important findings, since longer routes generally involve higher operational costs and therefore higher fares.",
+
+  "totalPrice__layoverNumber" = "There is a moderate positive relationship between price and number of layovers in this processed dataset. This suggests that itinerary complexity may be associated with higher final fare, although the effect is not purely linear.",
+
+  "totalPrice__segmentDistance" = "The relationship between totalPrice and segmentDistance is positive but weaker than the one observed with travelDistance. This makes sense because total fare depends on the whole trip, not only on the first segment.",
+
+  "totalPrice__seatsLeft" = "The association between totalPrice and seatsLeft is very weak. Seat availability alone does not appear to explain meaningful variation in fares once the rest of the itinerary characteristics are considered.",
+
+  "economy__totalPrice" = "Economy status clearly separates the price distribution. Economy flights show substantially lower prices, which is fully coherent with class-based fare segmentation.",
+
+  "economy__taxAmount" = "Economy flights tend to be associated with lower tax amounts, which is consistent with their lower overall ticket prices.",
+
+  "economy__travelDistance" = "Economy flights appear associated with somewhat shorter routes on average. This may reflect route composition or the concentration of premium products on longer itineraries.",
+
+  "economy__seatsLeft" = "The difference in seatsLeft by economy suggests that seat availability behaves differently across fare structures. This may reflect aircraft configuration or booking dynamics rather than a direct pricing mechanism.",
+
+  "nonStop__totalPrice" = "The distribution of totalPrice differs strongly by nonStop status. In this processed dataset, flights with stops show higher prices on average, likely because they are also longer or more complex itineraries.",
+
+  "nonStop__travelDistance" = "Flights with layovers are associated with much longer distances on average. This is consistent with network design, where long-haul routes are often split into multiple segments.",
+
+  "nonStop__layoverNumber" = "This is a structural relationship: direct flights have zero layovers by definition, while non-direct flights accumulate one or more stops. It confirms the internal consistency of the processed data.",
+
+  "airline__totalPrice" = "Ticket prices vary substantially across airlines. This suggests heterogeneous pricing strategies, different route structures, and possible segmentation between carriers.",
+
+  "airline__travelDistance" = "Airlines show clearly different route-distance profiles. Some carriers are more concentrated on shorter or medium-haul routes, while others operate longer itineraries.",
+
+  "airline__layoverNumber" = "The number of layovers differs across airlines, reflecting different network structures and hub strategies. This is useful to understand the operational logic of the market.",
+
+  "startApt__totalPrice" = "Origin airport is associated with substantial differences in average ticket price. This likely reflects route mix, market demand, and airport-specific competition.",
+
+  "startApt__travelDistance" = "Travel distance varies notably across origin airports. This suggests that some airports are connected to longer-haul markets on average than others.",
+
+  "startApt__segmentDistance" = "The first-segment distance also varies by origin airport, indicating structural differences in route configuration depending on departure hub.",
+
+  "startApt__layoverNumber" = "Some origin airports are associated with more layovers on average, which may reflect lower availability of direct connections or more hub-based routing.",
+
+  "destApt__totalPrice" = "Destination airport also seems associated with ticket price differences. This supports the idea that market conditions and route composition affect fare formation.",
+
+  "destApt__travelDistance" = "Destination airports differ strongly in their average route distance. This is coherent with the presence of both short-haul and long-haul destination markets.",
+
+  "destApt__layoverNumber" = "Some destination airports show more complex itineraries on average, as reflected by a higher number of layovers.",
+
+  "startApt__destApt" = "The contingency table reflects the structure of the observed route network. This relationship is useful to understand market coverage rather than pricing behaviour directly.",
+
+  "travelDistance__segmentDistance" = "These two variables show a moderate-to-strong positive association. Since both capture aspects of route length, they may contain partially redundant information.",
+
+  "travelDistance__layoverNumber" = "Longer trips tend to involve more layovers. This is a coherent operational pattern, as complex or long-haul itineraries are more likely to require one or more connections.",
+
+  "segmentDistance__layoverNumber" = "The negative association suggests that when the first segment is longer, the itinerary may need fewer stops overall. This is plausible because a longer initial leg can absorb a larger portion of the route.",
+
+  "departure__arrival" = "The almost perfect relationship between departure and arrival is structural and expected. Arrival time is directly determined by departure time plus flight duration, so this does not add much explanatory value by itself."
+)
+
+analisis <- function(X, Y, nom_x, nom_y) {
+  
+  cat("\n\n### Variable:", nom_x, "vs", nom_y, "\n\n")
+  
+  # --- PASO 1: Guardamos si originalmente eran fechas ---
+  es_fecha_x <- inherits(X, "Date") || inherits(X, "POSIXct")
+  es_fecha_y <- inherits(Y, "Date") || inherits(Y, "POSIXct")
+  
+  # Convertimos a numérico para cálculos matemáticos
+  if (es_fecha_x) X <- as.numeric(X)
+  if (es_fecha_y) Y <- as.numeric(Y)
+  
+  # --- CASO: NUMERIC vs NUMERIC ---
+  if (is.numeric(X) && is.numeric(Y)) {
+    df <- data.frame(x = X, y = Y) %>% tidyr::drop_na()
+    if (nrow(df) > 1) {
+      corr <- cor(df$x, df$y, use = "complete.obs")
+      cat("**Pearson correlation** =", round(corr, 4), "\n\n")
+      p <- ggplot(df, aes(x = x, y = y)) +
+        geom_point(alpha = 0.4, color = "steelblue") +
+        geom_smooth(method = "lm", se = TRUE, color = "darkred") +
+        labs(title = paste("Relationship between", nom_x, "and", nom_y), x = nom_x, y = nom_y) +
+        theme_minimal()
+      print(p)
+    }
+    
+  # --- CASO: CATEGORICAL (X) vs NUMERIC (Y) ---
+  } else if ((is.factor(X) || is.character(X) || is.logical(X)) && is.numeric(Y)) {
+    if (is.logical(X)) X <- as.factor(X)
+    df <- data.frame(x = as.factor(X), y = Y) %>% tidyr::drop_na()
+    
+    if (nrow(df) > 0) {
+      resumen_cat <- df %>%
+        dplyr::group_by(x) %>%
+        dplyr::summarise(
+          n = dplyr::n(),
+          mean = mean(y, na.rm = TRUE),
+          median = median(y, na.rm = TRUE),
+          sd = sd(y, na.rm = TRUE),
+          .groups = "drop"
+        )
+      
+      # --- PASO 2: Si era fecha, convertimos la media y mediana de vuelta a Date ---
+      if (es_fecha_y) {
+        resumen_cat$mean <- as.Date(resumen_cat$mean, origin = "1970-01-01")
+        resumen_cat$median <- as.Date(resumen_cat$median, origin = "1970-01-01")
+      } else {
+        resumen_cat$mean <- round(resumen_cat$mean, 2)
+        resumen_cat$median <- round(resumen_cat$median, 2)
+      }
+      resumen_cat$sd <- round(resumen_cat$sd, 2)
+      
+      print(knitr::kable(resumen_cat, caption = paste("Summary of", nom_y, "by", nom_x), row.names = FALSE))
+      
+      p <- ggplot(df, aes(x = x, y = y, fill = x)) +
+        geom_boxplot(alpha = 0.7, na.rm = TRUE) +
+        labs(title = paste(nom_y, "by", nom_x), x = nom_x, y = nom_y) +
+        theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + guides(fill = "none")
+      print(p)
+    }
+
+  # --- CASO: NUMERIC (X) vs CATEGORICAL (Y) ---
+  } else if (is.numeric(X) && (is.factor(Y) || is.character(Y) || is.logical(Y))) {
+    if (is.logical(Y)) Y <- as.factor(Y)
+    df <- data.frame(x = X, y = as.factor(Y)) %>% tidyr::drop_na()
+    
+    if (nrow(df) > 0) {
+      resumen_cat <- df %>%
+        dplyr::group_by(y) %>%
+        dplyr::summarise(
+          n = dplyr::n(),
+          mean = mean(x, na.rm = TRUE),
+          median = median(x, na.rm = TRUE),
+          sd = sd(x, na.rm = TRUE),
+          .groups = "drop"
+        )
+      
+      # --- PASO 3: Si era fecha, convertimos la media y mediana de vuelta a Date ---
+      if (es_fecha_x) {
+        resumen_cat$mean <- as.Date(resumen_cat$mean, origin = "1970-01-01")
+        resumen_cat$median <- as.Date(resumen_cat$median, origin = "1970-01-01")
+      } else {
+        resumen_cat$mean <- round(resumen_cat$mean, 2)
+        resumen_cat$median <- round(resumen_cat$median, 2)
+      }
+      resumen_cat$sd <- round(resumen_cat$sd, 2)
+      
+      print(knitr::kable(resumen_cat, caption = paste("Summary of", nom_x, "by", nom_y), row.names = FALSE))
+      
+      p <- ggplot(df, aes(x = y, y = x, fill = y)) +
+        geom_boxplot(alpha = 0.7, na.rm = TRUE) +
+        labs(title = paste(nom_x, "by", nom_y), x = nom_y, y = nom_x) +
+        theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + guides(fill = "none")
+      print(p)
+    }
+
+  # --- CASO: CATEGORICAL vs CATEGORICAL ---
+  } else if ((is.factor(X) || is.character(X) || is.logical(X)) &&
+             (is.factor(Y) || is.character(Y) || is.logical(Y))) {
+    if (is.logical(X)) X <- as.factor(X)
+    if (is.logical(Y)) Y <- as.factor(Y)
+    df <- data.frame(x = as.factor(X), y = as.factor(Y)) %>% tidyr::drop_na()
+    if (nrow(df) > 0) {
+      tabla <- table(df$x, df$y, useNA = "ifany")
+      print(knitr::kable(as.data.frame.matrix(tabla), caption = paste("Contingency table:", nom_x, "vs", nom_y)))
+    }
+  }
+
+  # Interpretación de los comentarios (esto se mantiene igual)
+  clave <- paste0(nom_x, "__", nom_y)
+  clave_inv <- paste0(nom_y, "__", nom_x)
+  if (clave %in% names(comentarios_bivariantes)) {
+    cat("\n\n**Interpretation:** ", comentarios_bivariantes[[clave]], "\n\n")
+  } else if (clave_inv %in% names(comentarios_bivariantes)) {
+    cat("\n\n**Interpretation:** ", comentarios_bivariantes[[clave_inv]], "\n\n")
+  }
+  cat("\n\n---\n\n")
+}
+
+vars <- names(dd)
+
+for (i in 1:(length(vars) - 1)) {
+  for (j in (i + 1):length(vars)) {
+    analisis(dd[[vars[i]]], dd[[vars[j]]], vars[i], vars[j])
+  }
+}
+```
+
+## Correlation matrix of numeric variables
+
+```{r correlations, fig.width=9, fig.height=7}
+vars_num <- names(dd)[sapply(dd, is.numeric)]
+
+if (length(vars_num) > 1) {
+  cor_mat <- cor(dd[, vars_num], use = "pairwise.complete.obs")
+  
+  corr_df <- as.data.frame(as.table(cor_mat))
+  colnames(corr_df) <- c("Var1", "Var2", "Correlation")
+  
+  ggplot(corr_df, aes(x = Var1, y = Var2, fill = Correlation)) +
+    geom_tile() +
+    geom_text(aes(label = round(Correlation, 2)), size = 3) +
+    scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+    labs(title = "Correlation matrix") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+```
+
+## Most important results
+
+After generating all pairwise combinations, the most relevant bivariate relationships are concentrated around price formation, itinerary structure, and route length. In particular, `totalPrice` shows meaningful positive relationships with `travelDistance`, `taxAmount`, and `layoverNumber`, which suggests that longer and more complex itineraries tend to be more expensive.
+
+Categorical variables also contribute substantially to price differentiation. The distributions of `totalPrice` vary across `airline`, `startApt`, and `destApt`, indicating that market structure, route composition, and airline pricing strategies remain important even after preprocessing.
+
+Structural variables such as `nonStop` and `economy` also separate fare distributions clearly. In the processed dataset, direct versus non-direct itineraries and economy versus non-economy status continue to capture relevant differences in both fare level and travel characteristics.
+
+Distance-related variables such as `travelDistance` and `segmentDistance` remain associated, which is expected because both represent route length. This suggests that they may still contain partially overlapping information and should be monitored if dimensionality reduction or variable selection is later applied.
+
+Finally, some pairs involving temporal variables, such as `flightDate` with `departure` or `arrival`, show very strong associations. These should be interpreted as structural relationships caused by the way date-time information is recorded, rather than as economically meaningful relationships.
