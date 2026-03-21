@@ -80,7 +80,7 @@ for (k in 1:10) {
 plot <- ggplot(data.frame(x = 1:10, y = sse), aes(x, y)) +
   geom_line() +
   geom_point() +
-  labs(x = "Number of clusters", y = "SSE", title = "Método del codo") 
+  labs(x = "Number of clusters", y = "SSE", title = "Elbow Method") 
 
 print(plot)
 
@@ -276,9 +276,8 @@ plot_DB_hc <- ggplot(DB_df_hc, aes(x = k, y = DB)) +
   theme_minimal() +
   scale_x_continuous(breaks = 2:10) +
   labs(title = "Índice Davies-Bouldin (H. Clustering)",
-       subtitle = "Buscamos el valor mínimo o un 'codo' claro",
-       x = "Número de clústeres (k)", 
-       y = "Índice Davies-Bouldin (DB)")
+       x = "Number of clusters (k)", 
+       y = "Davies-Bouldin Index (DB)")
 
 print(plot_DB_hc)
 
@@ -300,8 +299,7 @@ plot_CH_hc <- ggplot(CH_df_hc, aes(x = k, y = CH)) +
   geom_line(color = "green4") +
   theme_minimal() +
   scale_x_continuous(breaks = 2:10) +
-  labs(title = "Índice Calinski-Harabasz (H. Clustering)",
-       subtitle = "Buscamos el valor MÁXIMO (pico más alto)",
+  labs(title = "Calinski-Harabasz Index (H. Clustering)",
        x = "Número de clústeres (k)", 
        y = "Índice Calinski-Harabasz (CH)")
 
@@ -361,9 +359,40 @@ plot(res_hc, main = "Dendrograma de Vuelos (Métrica: Gower, Agregación: Ward)"
      xlab = "Vuelos", sub = "", ylab = "Distancia (Inercia)", cex = 0.5)
 
 # ------------------------------------------------------------------------------
+# Validación matemática de k mediante el Coeficiente de Silueta
+# ------------------------------------------------------------------------------
+cat("\n--- Evaluando diferentes k con el Coeficiente de Silueta ---\n")
+
+# Calculamos la silueta para k=2
+grupos_k2 <- cutree(res_hc, k = 2)
+sil_k2 <- silhouette(grupos_k2, mat_dist)
+media_k2 <- summary(sil_k2)$avg.width
+
+# Calculamos la silueta para k=3
+grupos_k3 <- cutree(res_hc, k = 3)
+sil_k3 <- silhouette(grupos_k3, mat_dist)
+media_k3 <- summary(sil_k3)$avg.width
+
+# Calculamos la silueta para k=4
+grupos_k4 <- cutree(res_hc, k = 4)
+sil_k4 <- silhouette(grupos_k4, mat_dist)
+media_k4 <- summary(sil_k4)$avg.width
+
+# Calculamos la silueta para k=5
+grupos_k5 <- cutree(res_hc, k = 5)
+sil_k5 <- silhouette(grupos_k5, mat_dist)
+media_k5 <- summary(sil_k5)$avg.width
+
+cat("Silueta media para k = 2:", media_k2, "\n")
+cat("Silueta media para k = 3:", media_k3, "\n")
+cat("Silueta media para k = 4:", media_k4, "\n")
+cat("Silueta media para k = 5:", media_k5, "\n")
+
+# ------------------------------------------------------------------------------
 # 10d. Discusión del número final de clústeres
 # ------------------------------------------------------------------------------
-# Tras observar los saltos de inercia en el dendrograma definimos el punto de corte.
+# Tras observar los saltos de inercia en el dendrograma y usando el
+# método de Silhouette, definimos el punto de corte.
 k_elegido <- 3
 
 # Dibujamos las fronteras de los grupos en el dendrograma para visualizar el corte
