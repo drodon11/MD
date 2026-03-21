@@ -1,93 +1,183 @@
 # ==============================================================================
-#                          Profiling de los Clústeres
+#                                 Profiling
 # ==============================================================================
 
-# Carga de paquetes
-list.of.packages <- c("FactoMineR", "dplyr") 
-new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
-if(length(new.packages) > 0) install.packages(new.packages)
-
-library(FactoMineR)
-library(dplyr)
-
 # ------------------------------------------------------------------------------
-# Cargar los datos y preparar variables
+# 0. LIBRERÍAS Y CARGA DE DATOS
 # ------------------------------------------------------------------------------
-cat("\n--- Cargando datos clusterizados ---\n")
-input_path <- file.path(getwd(), "data", "interim", "flightprices_clustered.rds")
+library(FactoMineR) 
+library(factoextra)  
+library(ggplot2)     
+library(dplyr)      
+
+setwd(getwd()) 
+input_path <- file.path("data", "interim", "flightprices_clustered.rds")
 dd_clust <- readRDS(input_path)
 
-# Separamos las variables según su tipo 
-varNum <- names(select_if(dd_clust, is.numeric))
-varCat <- names(select_if(dd_clust, is.factor))
-varCat <- varCat[varCat != "cluster"] # Quitamos la variable objetivo
+# Aseguramos que el clúster es un factor
+dd_clust$cluster <- as.factor(dd_clust$cluster)
 
-cat("\n========================================================\n")
-cat(" Gráficos Descriptivos Bivariantes\n")
-cat("========================================================\n")
+# Variables comunes
+dades <- dd_clust
+P <- dades$cluster
+nameP <- "cluster"
+nc <- length(levels(factor(P)))
+vars_analisis <- setdiff(names(dades), "cluster")
+K <- length(vars_analisis)
 
-# Profiling de Variables Numéricas (Boxplots y ANOVA)
-cat("\n--- Analizando Variables Numéricas ---\n")
-for(v in varNum) {
-  # Test ANOVA para ver si la media de la variable cambia según el clúster
-  p_val <- summary(aov(dd_clust[[v]] ~ dd_clust$cluster))[[1]][["Pr(>F)"]][1]
+
+# ==============================================================================
+# Script Karina
+# ==============================================================================
+
+# Funciones matemáticas originales de Karina
+ValorTestXnum <- function(Xnum,P){
+  nk <- as.vector(table(P)); n <- sum(nk); xk <- tapply(Xnum,P,mean)
+  txk <- (xk-mean(Xnum))/(sd(Xnum)*sqrt((n-nk)/(n*nk))); pxk <- pt(txk,n-1,lower.tail=F)
+  for(c in 1:length(levels(as.factor(P)))){if (pxk[c]>0.5){pxk[c]<-1-pxk[c]}}
+  return (pxk)
+}
+
+ValorTestXquali <- function(P,Xquali){
+  taula <- table(P,Xquali); n <- sum(taula); pk <- apply(taula,1,sum)/n
+  pj <- apply(taula,2,sum)/n; pf <- taula/(n*pk)
+  pjm <- matrix(data=pj,nrow=dim(pf)[1],ncol=dim(pf)[2], byrow=TRUE); dpf <- pf - pjm 
+  dvt <- sqrt(((1-pk)/(n*pk))%*%t(pj*(1-pj))); zkj <- dpf
+  zkj[dpf!=0]<-dpf[dpf!=0]/dvt[dpf!=0]; pzkj <- pnorm(zkj,lower.tail=F)
+  for(c in 1:length(levels(as.factor(P)))){for (s in 1:length(levels(Xquali))){if (pzkj[c,s]> 0.5){pzkj[c,s]<-1- pzkj[c,s]}}}
+  return (list(rowpf=pf,vtest=zkj,pval=pzkj))
+}
+
+pvalk <- matrix(data=0, nrow=nc, ncol=K, dimnames=list(levels(P), vars_analisis))
+n_filas <- dim(dades)[1]
+# Para que se guarde el output en un pdf y en txt, se puede descomentar esto
+# pdf("1_Profiling_Karina_Graficos.pdf", width=10, height=7)
+# sink("1_Profiling_Karina_Resultados.txt")
+
+for(k_idx in 1:K){
+  v_name <- vars_analisis[k_idx]
+  v_data <- dades[[v_name]]
   
-  # Si el p-value es < 0.05, la variable es significativa para diferenciar grupos
-  if(!is.na(p_val) && p_val < 0.05) {
-    cat("Significativa:", v, "(p-value:", format(p_val, scientific = TRUE), ")\n")
+  if (is.numeric(v_data)){ 
+    print(paste("Anàlisi Variable Numèrica:", v_name))
+    boxplot(v_data~P, main=paste("Boxplot of", v_name, "vs", nameP ), horizontal=TRUE, col=rainbow(nc))
+    barplot(tapply(v_data, P, mean), main=paste("Means of", v_name, "by", nameP ), col=rainbow(nc))
+    abline(h=mean(v_data, na.rm=TRUE), lwd=2, lty=2)
     
-    # Gráfico Boxplot
-    boxplot(dd_clust[[v]] ~ dd_clust$cluster, 
-            main = paste("Boxplot de", v, "por Clúster"),
-            xlab = "Clúster", ylab = v, col = 2:4)
+    o <- oneway.test(v_data~P)
+    print(paste("p-value ANOVA:", o$p.value))
+    
+    pvalk[,k_idx] <- ValorTestXnum(v_data, P)
+    print("p-values ValorsTest: "); print(pvalk[,k_idx])      
+    
+  } else if (inherits(v_data, "Date") || inherits(v_data, "POSIXt")) {
+    print(paste("Anàlisi Variable Data:", v_name))
+    hist(v_data, breaks="weeks", main=paste("Histogram of", v_name))
+    
+  } else {
+    print(paste("Variable Qualitativa:", v_name))
+    v_data <- as.factor(v_data)
+    
+    paleta <- rainbow(length(levels(v_data)))
+    barplot(table(v_data, as.factor(P)), beside=TRUE, col=paleta, main=paste("Grouped Barplot:", v_name))
+    legend("topright", levels(v_data), pch=15, cex=0.6, col=paleta)
+    
+    print("Test Chi quadrat: ")
+    print(suppressWarnings(chisq.test(v_data, as.factor(P))))
+    
+    vt_res <- ValorTestXquali(P, v_data)
+    print("valorsTest:"); print(vt_res)
+    pvalk[,k_idx] <- apply(vt_res$pval, 1, min, na.rm=TRUE)
   }
 }
 
-# Profiling de Variables Categóricas (Barplots y Chi-Cuadrado)
-cat("\n--- Analizando Variables Categóricas ---\n")
-for(v in varCat) {
-  # Test Chi-cuadrado para ver si la proporción cambia según el clúster
-  # suppressWarnings para evitar el aviso si alguna categoría tiene pocos vuelos
-  p_val <- suppressWarnings(chisq.test(table(dd_clust[[v]], dd_clust$cluster))$p.value)
-  
-  if(!is.na(p_val) && p_val < 0.05) {
-    cat("Significativa:", v, "(p-value:", format(p_val, scientific = TRUE), ")\n")
-    
-    # Gráfico Spineplot
-    tabla_prop <- prop.table(table(dd_clust[[v]], dd_clust$cluster), margin = 2)
-    barplot(tabla_prop, 
-            main = paste("Distribución de", v, "por Clúster"),
-            xlab = "Clúster", ylab = "Proporción", 
-            col = heat.colors(length(unique(dd_clust[[v]]))),
-            legend = rownames(tabla_prop), args.legend = list(x = "topright", cex = 0.7))
-    tabla_freq <- table(dd_clust$cluster, dd_clust[[v]])
-    # Histograma
-    barplot(tabla_freq, 
-            beside = TRUE,
-            main = paste("Distribución de", v, "por Clúster (Agrupado)"),
-            xlab = v, ylab = "Cantidad de Vuelos", 
-            col = c("#4DAF4A", "#377EB8", "#E41A1C"),
-            legend = paste("Clúster", rownames(tabla_freq)), 
-            args.legend = list(x = "topright", cex = 0.8))
+cat("\n==============================================================\n")
+cat(" RESUM FINAL KARINA: P-VALUES PER CLASSE (ORDENATS)\n")
+for (c in 1:nc) {
+  if(!is.na(levels(as.factor(P))[c])){
+    print(paste("P.values per class:", levels(as.factor(P))[c]))
+    print(sort(pvalk[c,]), digits=3) 
   }
 }
+# Para que se guarde el output en un pdf y en txt, se puede descomentar esto
+#sink()
+#dev.off() 
 
-cat("\n========================================================\n")
-cat(" Test de Lebart\n")
-cat("========================================================\n")
 
-# Buscamos en qué columna está el clúster
+# ==============================================================================
+# Script Sergi
+# ==============================================================================
+
+# Para que se guarde el output en un pdf y en txt, se puede descomentar esto
+# pdf("2_Profiling_Sergi_Graficos.pdf", width=12, height=8)
+# sink("2_Profiling_Sergi_Resultados.txt")
+
+var_num <- vars_analisis[sapply(dd_clust[vars_analisis], is.numeric)]
+var_cat <- vars_analisis[sapply(dd_clust[vars_analisis], is.factor)]
+colores <- c("#00AFBB", "#E7B800", "#FC4E07", "#868686", "#4DAF4A", "#984EA3")
+
+# --- VISUALIZACIÓN DESCRIPTIVA ---
+cat("\n--- VISUALIZACIÓN DESCRIPTIVA BIVARIANTE ---\n")
+for (v in var_num) {
+  p1 <- ggplot(dd_clust, aes_string(x = "cluster", y = v, fill = "cluster")) +
+    geom_boxplot(alpha = 0.7) +
+    scale_fill_manual(values = colores) +
+    theme_minimal() +
+    labs(title = paste("Boxplot de", v, "por Clúster"), x = "Clúster", y = v) +
+    theme(legend.position = "none")
+  print(p1) 
+}
+
+for (v in var_cat) {
+  p2 <- ggplot(dd_clust, aes_string(x = "cluster", fill = v)) +
+    geom_bar(position = "fill", alpha = 0.8) +
+    scale_y_continuous(labels = scales::percent) +
+    theme_minimal() +
+    labs(title = paste("Composición de", v, "dentro de cada Clúster"),
+         x = "Clúster", y = "Proporción") +
+    theme(axis.text.x = element_text(angle = 0))
+  
+  if (length(levels(dd_clust[[v]])) > 10) {
+    p2 <- p2 + theme(legend.text = element_text(size = 7), legend.key.size = unit(0.5, "cm"))
+  }
+  print(p2) 
+}
+
+# --- SIGNIFICACIÓN GLOBAL Y PERFILADO ---
+cat("\n--- SIGNIFICACIÓN GLOBAL Y PERFILADO ESTADÍSTICO (catdes) ---\n")
 idx_cluster <- which(names(dd_clust) == "cluster")
+res.catdes <- catdes(dd_clust, num.var = idx_cluster, prob = 0.05)
 
-# Ejecutamos el test de Lebart
-res_catdes <- catdes(dd_clust, num.var = idx_cluster)
+cat("\n--- RANKING DE VARIABLES CATEGÓRICAS (Chi-cuadrado) ---\n")
+print(res.catdes$test.chi2)
 
-cat("\n--- Variables que más definen a CADA CLÚSTER (v.test) ---\n")
-cat("* Si v.test > 1.96: La característica es inusualmente ALTA en ese grupo.\n")
-cat("* Si v.test < -1.96: La característica es inusualmente BAJA en ese grupo.\n\n")
+cat("\n--- RANKING DE VARIABLES NUMÉRICAS (Eta-cuadrado) ---\n")
+print(res.catdes$quanti.var)
 
-# Imprimimos los resultados
-print(res_catdes)
+cat("\n--- DESCRIPCIÓN DE CADA CLÚSTER (V-TESTS) ---\n")
+for (i in 1:length(res.catdes$category)) {
+  cat("\n-------------------------------------------------\n")
+  cat(" DESCRIPCIÓN DEL CLÚSTER", names(res.catdes$category)[i], "\n")
+  cat("-------------------------------------------------\n")
+  
+  cat("\n> Categorías sobrerrepresentadas / subrepresentadas:\n")
+  print(res.catdes$category[[i]])
+  
+  if (!is.null(res.catdes$quanti[[i]])) {
+    cat("\n> Variables numéricas caracterizadoras:\n")
+    print(res.catdes$quanti[[i]])
+  }
+}
 
-# Gráficos FactoMineR
-# plot(res_catdes)
+# Gráficos automáticos de catdes (v-tests)
+# plot(res.catdes, show = "all", barplot = TRUE)
+
+# Para que se guarde el output en un pdf y en txt, se puede descomentar esto
+# sink()
+# dev.off()
+
+# cat("Se han generado 4 archivos en tu carpeta de trabajo:\n")
+# cat("1. 1_Profiling_Karina_Graficos.pdf\n")
+# cat("2. 1_Profiling_Karina_Resultados.txt\n")
+# cat("3. 2_Profiling_Ramia_Graficos.pdf\n")
+# cat("4. 2_Profiling_Ramia_Resultados.txt\n")
