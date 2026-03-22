@@ -90,7 +90,6 @@ for(k_idx in 1:K){
     pvalk[,k_idx] <- apply(vt_res$pval, 1, min, na.rm=TRUE)
   }
 }
-
 cat("\n==============================================================\n")
 cat(" RESUM FINAL KARINA: P-VALUES PER CLASSE (ORDENATS)\n")
 for (c in 1:nc) {
@@ -123,7 +122,7 @@ for (v in var_num) {
     geom_boxplot(alpha = 0.7) +
     scale_fill_manual(values = colores) +
     theme_minimal() +
-    labs(title = paste("Boxplot de", v, "por Clúster"), x = "Clúster", y = v) +
+    labs(title = paste("Boxplot of", v, "for each Cluster"), x = "Cluster", y = v) +
     theme(legend.position = "none")
   print(p1) 
 }
@@ -133,8 +132,8 @@ for (v in var_cat) {
     geom_bar(position = "fill", alpha = 0.8) +
     scale_y_continuous(labels = scales::percent) +
     theme_minimal() +
-    labs(title = paste("Composición de", v, "dentro de cada Clúster"),
-         x = "Clúster", y = "Proporción") +
+    labs(title = paste("Composition of", v, "inside every cluster"),
+         x = "Cluster", y = "Proportion") +
     theme(axis.text.x = element_text(angle = 0))
   
   if (length(levels(dd_clust[[v]])) > 10) {
@@ -179,5 +178,5 @@ for (i in 1:length(res.catdes$category)) {
 # cat("Se han generado 4 archivos en tu carpeta de trabajo:\n")
 # cat("1. 1_Profiling_Karina_Graficos.pdf\n")
 # cat("2. 1_Profiling_Karina_Resultados.txt\n")
-# cat("3. 2_Profiling_Ramia_Graficos.pdf\n")
-# cat("4. 2_Profiling_Ramia_Resultados.txt\n")
+# cat("3. 2_Profiling_Sergi_Graficos.pdf\n")
+# cat("4. 2_Profiling_Sergi_Resultados.txt\n")
