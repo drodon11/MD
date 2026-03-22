@@ -331,8 +331,7 @@ dd_clust <- dd %>% dplyr::select(-any_of(vars_to_exclude))
 dd_clust <- dd_clust %>% 
   mutate_if(is.character, as.factor) %>%
   mutate_if(is.logical, as.factor) %>%
-  # Convierte automáticamente cualquier columna con solo 2 valores a factor
-  mutate(across(where(~ length(unique(na.omit(.x))) == 2), as.factor))
+  mutate(across(where(~ length(unique(na.omit(.x))) == 2 && !is.numeric(.x)), as.factor))
 
 cat(paste("Dataset listo con", nrow(dd_clust), "registros (Base de datos completa).\\n"))
 
