@@ -70,6 +70,58 @@ print(plot_acumulada)
 # Revisamos cómo contribuyen las variables originales a los 2 primeros componentes
 cat("\n--- Loadings (Pesos de las variables en PC1 y PC2) ---\n")
 loadings <- pca$rotation[, 1:4]
+
+loadings_df <- as.data.frame(loadings) %>%
+  tibble::rownames_to_column(var = "Variable") %>%
+  tidyr::pivot_longer(
+    cols = starts_with("PC"),
+    names_to = "Componente",
+    values_to = "Carga"
+  )
+
+# Invertimos el orden de las variables para que al girar el gráfico 
+# la primera variable de tu matriz aparezca arriba del todo, y no abajo.
+loadings_df$Variable <- factor(loadings_df$Variable, levels = rev(rownames(loadings)))
+
+# Generamos el grafico
+plot_loadings <- ggplot(loadings_df, aes(x = Variable, y = Carga, fill = Carga)) +
+  geom_col() + 
+  
+  # Añadimos una línea punteada en el 0 para distinguir visualmente positivo de negativo
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30", linewidth = 0.6) +
+  
+  # Ponemos los 4 gráficos en una cuadrícula de 2x2
+  facet_wrap(~ Componente, ncol = 2) + 
+  
+  # Giramos el gráfico para que las barras sean horizontales
+  coord_flip() + 
+  
+  # Colores: Rojo (negativo), Blanco (cero), Azul (positivo)
+  scale_fill_gradient2(
+    low = "#B2182B", mid = "white", high = "#2166AC", 
+    midpoint = 0, guide = "none"
+  ) +
+  
+  theme_bw() + 
+  theme(
+    strip.background = element_rect(fill = "#f0f0f0", color = "NA"),
+    strip.text = element_text(face = "bold", size = 11),
+    axis.text.y = element_text(face = "bold", size = 10),
+    axis.text.x = element_text(size = 9),
+    panel.grid.major.y = element_blank(),
+    panel.border = element_rect(color = "gray80")
+  ) +
+  
+  # Etiquetas
+  labs(
+    title = "Original Variables Contribution (Loadings)",
+    subtitle = "Variables direction and magnitude in all 4 Factorial Planes",
+    x = NULL,
+    y = "Value of the Variable (Loading)"
+  )
+
+print(plot_loadings)
+
 print(round(loadings, 3))
 
 scores <- pca$x
