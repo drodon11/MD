@@ -159,7 +159,7 @@ for (i in 1:length(res.catdes$category)) {
   cat(" DESCRIPCIÓN DEL CLÚSTER", names(res.catdes$category)[i], "\n")
   cat("-------------------------------------------------\n")
   
-  cat("\n> Categorías sobrerrepresentadas / subrepresentadas:\n")
+  cat("\n> Over represented / sub represented categories:\n")
   print(res.catdes$category[[i]])
   
   if (!is.null(res.catdes$quanti[[i]])) {
