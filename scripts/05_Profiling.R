@@ -118,9 +118,11 @@ colores <- c("#00AFBB", "#E7B800", "#FC4E07", "#868686", "#4DAF4A", "#984EA3")
 # --- VISUALIZACIÓN DESCRIPTIVA ---
 cat("\n--- VISUALIZACIÓN DESCRIPTIVA BIVARIANTE ---\n")
 for (v in var_num) {
+  media_global <- mean(dd_clust[[v]], na.rm = TRUE)
   p1 <- ggplot(dd_clust, aes_string(x = "cluster", y = v, fill = "cluster")) +
     geom_boxplot(alpha = 0.7) +
     scale_fill_manual(values = colores) +
+    geom_hline(yintercept = media_global, linetype = "dashed", color = "black", linewidth = 0.8) +
     theme_minimal() +
     labs(title = paste("Boxplot of", v, "for each Cluster"), x = "Cluster", y = v) +
     theme(legend.position = "none")
