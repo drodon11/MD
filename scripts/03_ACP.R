@@ -47,8 +47,8 @@ scree_df <- data.frame(
 plot_marginal <- ggplot(scree_df, aes(x = seq_along(VarExp), y = VarExp)) +
   geom_line(color = "blue") + 
   geom_point(size = 2, color = "darkblue") +
-  labs(x = "Componente Principal", y = "Proporción varianza explicada",
-       title = "Scree plot (Inercia Marginal)") +
+  labs(x = "Main Component", y = "Proportion of the explained variance",
+       title = "Scree plot") +
   theme_minimal() +
   scale_x_continuous(breaks = seq_along(scree_df$VarExp))
 
@@ -59,8 +59,8 @@ plot_acumulada <- ggplot(scree_df, aes(x = seq_along(CumExp), y = CumExp)) +
   geom_line(color = "red") + 
   geom_point(size = 2, color = "darkred") +
   geom_hline(yintercept = 0.8, linetype = "dashed", color = "black") +
-  labs(x = "Componente Principal", y = "Varianza acumulada",
-       title = "Varianza Acumulada (>80%)") +
+  labs(x = "Main Component", y = "Cumulative Variance",
+       title = "Cumulative Variance (>80%)") +
   theme_minimal() +
   scale_x_continuous(breaks = seq_along(scree_df$CumExp))
 
