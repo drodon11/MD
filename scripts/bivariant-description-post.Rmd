@@ -1,0 +1,233 @@
+---
+title: "Bivariate Descriptive Statistics after preprocessing - Flight Prices"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+Sys.setlocale("LC_TIME", "C")
+
+list.of.packages <- c(
+  "ggplot2", "dplyr", "visdat", "naniar", "DataExplorer",
+  "VIM", "tidyr", "knitr", "here", "gridExtra"
+)
+
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[, "Package"])]
+
+if (length(new.packages) > 0) {
+  install.packages(new.packages, repos = "https://cloud.r-project.org")
+}
+
+invisible(lapply(list.of.packages, require, character.only = TRUE))
+```
+
+```{r load-cleaning}
+input_path <- here::here("data", "interim", "flightprices_preprocessed.rds")
+dd <- readRDS(input_path)
+```
+
+## General Statistical Overview
+
+```{r general-summary}
+inventario <- data.frame(
+  Variable = names(dd),
+  Type     = sapply(dd, function(x) paste(class(x), collapse = "/")),
+  NAs      = sapply(dd, function(x) sum(is.na(x)))
+)
+
+knitr::kable(inventario, caption = "**Information of all variables**")
+```
+
+## Bivariate Analysis
+
+```{r bivariate-analysis, results='asis', fig.width=10, fig.height=4}
+
+
+unidades <- list(
+  taxAmount       = "USD",
+  totalPrice      = "USD",
+  travelDistance  = "miles",
+  segmentDistance = "miles"
+)
+
+analisis <- function(X, Y, nom_x, nom_y) {
+  
+  cat("\n\n### Variables:", nom_x, "vs", nom_y, "\n\n")
+  
+  # --- PASO 1: Detectar si son fechas antes de convertir ---
+  es_fecha_x <- inherits(X, "Date") || inherits(X, "POSIXct")
+  es_fecha_y <- inherits(Y, "Date") || inherits(Y, "POSIXct")
+  
+  # Convertimos a numérico para que ggplot y cor() funcionen
+  if (es_fecha_x) X <- as.numeric(X)
+  if (es_fecha_y) Y <- as.numeric(Y)
+  
+  unidad_x <- if (nom_x %in% names(unidades)) paste0(" (", unidades[[nom_x]], ")") else ""
+  unidad_y <- if (nom_y %in% names(unidades)) paste0(" (", unidades[[nom_y]], ")") else ""
+  
+  # --- CASO 1: NUMERIC vs NUMERIC ---
+  if (is.numeric(X) && is.numeric(Y)) {
+    df <- data.frame(x = X, y = Y) %>% tidyr::drop_na()
+    
+    if (nrow(df) > 1) {
+      corr <- cor(df$x, df$y, use = "complete.obs")
+      cat("**Type:** Numeric vs Numeric  \n")
+      cat("**Pearson correlation:**", round(corr, 4), "\n\n")
+      
+      # Para la tabla de resumen
+      resumen <- data.frame(
+        Statistic = c("N complete cases", "Mean X", "Mean Y", "SD X", "SD Y"),
+        Value = c(
+          as.character(nrow(df)),
+          if(es_fecha_x) as.character(as.Date(mean(df$x), origin="1970-01-01")) else as.character(round(mean(df$x), 2)),
+          if(es_fecha_y) as.character(as.Date(mean(df$y), origin="1970-01-01")) else as.character(round(mean(df$y), 2)),
+          round(sd(df$x), 2),
+          round(sd(df$y), 2)
+        )
+      )
+      
+      print(knitr::kable(resumen, caption = paste("Summary of", nom_x, "and", nom_y)))
+      
+      p1 <- ggplot(df, aes(x = x, y = y)) +
+        geom_point(alpha = 0.4, color = "steelblue") +
+        geom_smooth(method = "lm", se = TRUE, color = "darkred") +
+        labs(title = "Scatterplot", x = paste0(nom_x, unidad_x), y = paste0(nom_y, unidad_y)) +
+        theme_minimal()
+      
+      # Si es fecha, forzamos al eje a entenderlo como tal para el gráfico
+      if(es_fecha_x) p1 <- p1 + scale_x_continuous(labels = function(x) as.Date(x, origin="1970-01-01"))
+      if(es_fecha_y) p1 <- p1 + scale_y_continuous(labels = function(y) as.Date(y, origin="1970-01-01"))
+      
+      p2 <- ggplot(df, aes(x = x, y = y)) + geom_bin2d() +
+        labs(title = "Density", x = paste0(nom_x, unidad_x), y = paste0(nom_y, unidad_y)) +
+        theme_minimal()
+      
+      if(es_fecha_x) p2 <- p2 + scale_x_continuous(labels = function(x) as.Date(x, origin="1970-01-01"))
+      if(es_fecha_y) p2 <- p2 + scale_y_continuous(labels = function(y) as.Date(y, origin="1970-01-01"))
+      
+      gridExtra::grid.arrange(p1, p2, ncol = 2)
+    }
+    
+  # --- CASO 2: CATEGORICAL (X) vs NUMERIC (Y) ---
+  } else if ((is.factor(X) || is.character(X) || is.logical(X)) && is.numeric(Y)) {
+    if (is.logical(X)) X <- as.factor(X)
+    df <- data.frame(x = as.factor(X), y = Y) %>% tidyr::drop_na()
+    
+    if (nrow(df) > 0) {
+      cat("**Type:** Categorical vs Numeric  \n\n")
+      resumen_cat <- df %>% group_by(x) %>%
+        summarise(n = n(), Mean_val = mean(y), Median_val = median(y), SD = sd(y), .groups = "drop")
+      
+      # Formatear fechas en la tabla si corresponde
+      if (es_fecha_y) {
+        resumen_cat <- resumen_cat %>% mutate(
+          Mean = as.character(as.Date(Mean_val, origin="1970-01-01")),
+          Median = as.character(as.Date(Median_val, origin="1970-01-01"))
+        ) %>% select(x, n, Mean, Median, SD)
+      } else {
+        resumen_cat <- resumen_cat %>% mutate(Mean = round(Mean_val, 2), Median = round(Median_val, 2)) %>%
+          select(x, n, Mean, Median, SD)
+      }
+      
+      print(knitr::kable(resumen_cat, caption = paste("Summary of", nom_y, "by", nom_x)))
+      
+      p1 <- ggplot(df, aes(x = x, y = y, fill = x)) + geom_boxplot(alpha = 0.7) +
+        labs(title = "Boxplot", x = nom_x, y = paste0(nom_y, unidad_y)) +
+        theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + guides(fill = "none")
+      
+      if(es_fecha_y) p1 <- p1 + scale_y_continuous(labels = function(y) as.Date(y, origin="1970-01-01"))
+      
+      print(p1)
+    }
+    
+  # --- CASO 3: NUMERIC (X) vs CATEGORICAL (Y) ---
+  } else if (is.numeric(X) && (is.factor(Y) || is.character(Y) || is.logical(Y))) {
+    if (is.logical(Y)) Y <- as.factor(Y)
+    df <- data.frame(x = X, y = as.factor(Y)) %>% tidyr::drop_na()
+    
+    if (nrow(df) > 0) {
+      cat("**Type:** Numeric vs Categorical  \n\n")
+      resumen_cat <- df %>% group_by(y) %>%
+        summarise(n = n(), Mean_val = mean(x), Median_val = median(x), SD = sd(x), .groups = "drop")
+      
+      if (es_fecha_x) {
+        resumen_cat <- resumen_cat %>% mutate(
+          Mean = as.character(as.Date(Mean_val, origin="1970-01-01")),
+          Median = as.character(as.Date(Median_val, origin="1970-01-01"))
+        ) %>% select(y, n, Mean, Median, SD)
+      } else {
+        resumen_cat <- resumen_cat %>% mutate(Mean = round(Mean_val, 2), Median = round(Median_val, 2)) %>%
+          select(y, n, Mean, Median, SD)
+      }
+      
+      print(knitr::kable(resumen_cat, caption = paste("Summary of", nom_x, "by", nom_y)))
+      
+      p1 <- ggplot(df, aes(x = y, y = x, fill = y)) + geom_boxplot(alpha = 0.7) +
+        labs(title = "Boxplot", x = nom_y, y = paste0(nom_x, unidad_x)) +
+        theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + guides(fill = "none")
+      
+      if(es_fecha_x) p1 <- p1 + scale_y_continuous(labels = function(x) as.Date(x, origin="1970-01-01"))
+      
+      print(p1)
+    }
+    
+  # --- CASO 4: CATEGORICAL vs CATEGORICAL ---
+  } else if ((is.factor(X) || is.character(X) || is.logical(X)) &&
+             (is.factor(Y) || is.character(Y) || is.logical(Y))) {
+    if (is.logical(X)) X <- as.factor(X)
+    if (is.logical(Y)) Y <- as.factor(Y)
+    df <- data.frame(x = as.factor(X), y = as.factor(Y)) %>% tidyr::drop_na()
+    
+    if (nrow(df) > 0) {
+      cat("**Type:** Categorical vs Categorical  \n\n")
+      tabla <- table(df$x, df$y)
+      print(knitr::kable(as.data.frame.matrix(tabla), caption = paste("Contingency table:", nom_x, "vs", nom_y)))
+      
+      df_tab <- as.data.frame(tabla)
+      colnames(df_tab) <- c("X", "Y", "Freq")
+      p1 <- ggplot(df_tab, aes(x = X, y = Y, fill = Freq)) + geom_tile() +
+        geom_text(aes(label = Freq), size = 3) +
+        labs(title = "Heatmap", x = nom_x, y = nom_y) +
+        theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+      print(p1)
+    }
+  }
+  
+  
+}
+
+vars <- names(dd)
+
+for (i in 1:(length(vars) - 1)) {
+  for (j in (i + 1):length(vars)) {
+    analisis(dd[[vars[i]]], dd[[vars[j]]], vars[i], vars[j])
+  }
+}
+```
+
+## Correlation Matrix of Numeric Variables
+
+```{r correlations, fig.width=9, fig.height=7}
+vars_num <- names(dd)[sapply(dd, is.numeric)]
+
+if (length(vars_num) > 1) {
+  cor_mat <- cor(dd[, vars_num], use = "pairwise.complete.obs")
+  
+  corr_df <- as.data.frame(as.table(cor_mat))
+  colnames(corr_df) <- c("Var1", "Var2", "Correlation")
+  
+  ggplot(corr_df, aes(x = Var1, y = Var2, fill = Correlation)) +
+    geom_tile() +
+    geom_text(aes(label = round(Correlation, 2)), size = 3) +
+    scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+    labs(title = "Correlation Matrix") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+```
+
