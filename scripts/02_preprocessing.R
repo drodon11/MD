@@ -266,7 +266,7 @@ cat("\n--- 5. IMPUTACIÓN VALORES PERDIDOS -----\n")
 imputed_Data <- mice(dd_limpio, m = 5, maxit = 50, method = "pmm", ridge = 1e-3, 
                      seed = 500)
 
-dd <- mice::complete(imputed_Data, action = "long")
+dd <- mice::complete(imputed_Data, 2)
 
 # Eliminamos las variables que no son necesarias 
 dd[, c(".imp", ".id")] <- NULL
