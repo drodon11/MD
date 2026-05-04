@@ -2,7 +2,7 @@
 # Script de Preprocesamiento: Codificación de NAs, Detección de Outliers e Imputación (KNN)
 
 list.of.packages = c("ggplot2", "dplyr", "visdat", "naniar", "DataExplorer", 
-                     "VIM", "tidyr", "mice") 
+                     "VIM", "tidyr", "mice", "dbscan") 
 
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages) > 0) install.packages(new.packages, dependencies = TRUE)
