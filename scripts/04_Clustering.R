@@ -13,7 +13,7 @@ library(dplyr)
 # ------------------------------------------------------------------------------
 # Carga de datos
 # ------------------------------------------------------------------------------
-input_path <- file.path(getwd(), "data", "interim", "flightprices_interim.rds")
+input_path <- file.path(getwd(), "data", "interim", "flightprices_preprocessed.rds")
 dd <- readRDS(input_path)
 
 # ------------------------------------------------------------------------------
