@@ -59,19 +59,22 @@ print(summary(dd))
 dd <- na.omit(dd)
 
 dd <- dd |>
-  mutate(across(where(is.character), as.factor))
+  mutate(
+    across(where(is.character), as.factor),
+    across(where(is.logical), as.factor)
+  )
 
-if (!("price" %in% names(dd))) {
-  stop("No existe una variable llamada 'price'. Revisa el nombre exacto de la variable objetivo.")
+if (!("totalPrice" %in% names(dd))) {
+  stop("No existe una variable llamada 'totalPrice'. Revisa el nombre exacto de la variable objetivo.")
 }
 
-dd$price <- as.numeric(dd$price)
+dd$totalPrice <- as.numeric(dd$totalPrice)
 
 tipos <- sapply(dd, class)
 
 varCat <- names(tipos)[tipos %in% c("character", "factor")]
 varNum <- names(tipos)[tipos %in% c("integer", "numeric")]
-varNumPred <- setdiff(varNum, "price")
+varNumPred <- setdiff(varNum, "totalPrice")
 
 cat("\nDimensiones después de eliminar missing values:\n")
 print(dim(dd))
@@ -97,20 +100,20 @@ print(tabla_variables)
 # 4. ANALISIS EXPLORATORIO
 # ==============================================================================
 
-ggplot(dd, aes(x = price)) +
+ggplot(dd, aes(x = totalPrice)) +
   geom_histogram(bins = 40, fill = "steelblue", color = "white") +
   labs(
-    title = "Distribución del precio de los vuelos",
-    x = "Precio",
+    title = "Distribución del precio total de los vuelos",
+    x = "Precio total",
     y = "Frecuencia"
   ) +
   theme_minimal()
 
-ggplot(dd, aes(y = price)) +
+ggplot(dd, aes(y = totalPrice)) +
   geom_boxplot(fill = "lightblue") +
   labs(
-    title = "Boxplot del precio de los vuelos",
-    y = "Precio"
+    title = "Boxplot del precio total de los vuelos",
+    y = "Precio total"
   ) +
   theme_minimal()
 
@@ -130,10 +133,14 @@ if (length(vars_ggpairs) >= 2) {
 # 5. SELECCION DE VARIABLE PARA MODELO SIMPLE
 # ==============================================================================
 
-if ("duration" %in% varNumPred) {
-  x_simple <- "duration"
-} else if ("days_left" %in% varNumPred) {
-  x_simple <- "days_left"
+if ("travelDistance" %in% varNumPred) {
+  x_simple <- "travelDistance"
+} else if ("seatsLeft" %in% varNumPred) {
+  x_simple <- "seatsLeft"
+} else if ("elapsedDays" %in% varNumPred) {
+  x_simple <- "elapsedDays"
+} else if ("baseFare" %in% varNumPred) {
+  x_simple <- "baseFare"
 } else {
   x_simple <- varNumPred[1]
 }
@@ -141,12 +148,12 @@ if ("duration" %in% varNumPred) {
 cat("\nVariable usada para el modelo simple:\n")
 print(x_simple)
 
-grafico_simple <- ggplot(dd, aes(x = .data[[x_simple]], y = price)) +
+grafico_simple <- ggplot(dd, aes(x = .data[[x_simple]], y = totalPrice)) +
   geom_point(alpha = 0.4) +
   labs(
-    title = paste("Precio frente a", x_simple),
+    title = paste("Precio total frente a", x_simple),
     x = x_simple,
-    y = "Precio"
+    y = "Precio total"
   ) +
   theme_minimal()
 
@@ -157,7 +164,7 @@ print(grafico_simple)
 # ==============================================================================
 
 formula_simple <- as.formula(
-  paste("price ~", x_simple)
+  paste("totalPrice ~", x_simple)
 )
 
 modelo_simple <- lm(formula_simple, data = dd)
@@ -173,12 +180,12 @@ grafico_simple +
 
 cat("\nPrimeros residuos del modelo simple:\n")
 print(head(data.frame(
-  observado = dd$price,
+  observado = dd$totalPrice,
   ajustado = fitted(modelo_simple),
   residuo = residuals(modelo_simple)
 )))
 
-ggfortify::autoplot(modelo_simple) +
+autoplot(modelo_simple) +
   theme_minimal()
 
 cat("\nTest de Breusch-Pagan para homocedasticidad:\n")
@@ -232,21 +239,25 @@ print(predict(
 # ==============================================================================
 
 preferidas <- c(
-  "duration",
-  "days_left",
+  "elapsedDays",
+  "economy",
+  "nonStop",
+  "baseFare",
+  "seatsLeft",
+  "travelDistance",
   "airline",
-  "source_city",
-  "destination_city",
-  "stops",
-  "class",
-  "departure_time",
-  "arrival_time"
+  "equipment",
+  "startApt",
+  "destApt",
+  "departure_raw",
+  "arrival_raw",
+  "segmentDistance_raw"
 )
 
 vars_modelo_multiple <- preferidas[preferidas %in% names(dd)]
 
 if (length(vars_modelo_multiple) < 3) {
-  otras_vars <- setdiff(names(dd), c("price", vars_modelo_multiple))
+  otras_vars <- setdiff(names(dd), c("totalPrice", vars_modelo_multiple))
   vars_modelo_multiple <- unique(c(vars_modelo_multiple, head(otras_vars, 5)))
 }
 
@@ -254,7 +265,7 @@ cat("\nVariables usadas en el modelo múltiple:\n")
 print(vars_modelo_multiple)
 
 formula_multiple <- as.formula(
-  paste("price ~", paste(vars_modelo_multiple, collapse = " + "))
+  paste("totalPrice ~", paste(vars_modelo_multiple, collapse = " + "))
 )
 
 modelo_multiple <- lm(formula_multiple, data = dd)
@@ -280,7 +291,7 @@ if (length(varCat) > 0) {
   cat_var <- varCat[1]
   
   formula_factor <- as.formula(
-    paste("price ~", x_simple, "+", cat_var)
+    paste("totalPrice ~", x_simple, "+", cat_var)
   )
   
   modelo_factor <- lm(formula_factor, data = dd)
@@ -302,7 +313,7 @@ if (length(varCat) > 0) {
 if (length(varCat) > 0) {
   
   formula_interaccion <- as.formula(
-    paste("price ~", x_simple, "*", cat_var)
+    paste("totalPrice ~", x_simple, "*", cat_var)
   )
   
   modelo_interaccion <- lm(formula_interaccion, data = dd)
@@ -319,14 +330,14 @@ if (length(varCat) > 0) {
   
   ggplot(
     dd_inter,
-    aes(x = .data[[x_simple]], y = price, color = .data[[cat_var]])
+    aes(x = .data[[x_simple]], y = totalPrice, color = .data[[cat_var]])
   ) +
     geom_point(alpha = 0.4) +
     geom_smooth(method = "lm", se = FALSE) +
     labs(
       title = paste("Interacción entre", x_simple, "y", cat_var),
       x = x_simple,
-      y = "Precio",
+      y = "Precio total",
       color = cat_var
     ) +
     theme_minimal()
@@ -343,7 +354,7 @@ print(try(car::vif(modelo_multiple)))
 # 11. MODELO COMPLETO
 # ==============================================================================
 
-modelo_completo <- lm(price ~ ., data = dd)
+modelo_completo <- lm(totalPrice ~ ., data = dd)
 
 cat("\nResumen del modelo completo:\n")
 print(summary(modelo_completo))
@@ -371,7 +382,7 @@ print(anova(modelo_simple, modelo_multiple))
 set.seed(2108)
 
 trainIndex <- caret::createDataPartition(
-  dd$price,
+  dd$totalPrice,
   p = 0.8,
   list = FALSE,
   times = 1
@@ -384,12 +395,12 @@ modelo_train <- lm(formula(modelo_step), data = train)
 
 pred_test <- predict(modelo_train, newdata = test)
 
-rmse <- sqrt(mean((test$price - pred_test)^2))
-mae  <- mean(abs(test$price - pred_test))
-mse  <- mean((test$price - pred_test)^2)
+rmse <- sqrt(mean((test$totalPrice - pred_test)^2))
+mae  <- mean(abs(test$totalPrice - pred_test))
+mse  <- mean((test$totalPrice - pred_test)^2)
 
-r2_test <- 1 - sum((test$price - pred_test)^2) /
-  sum((test$price - mean(test$price))^2)
+r2_test <- 1 - sum((test$totalPrice - pred_test)^2) /
+  sum((test$totalPrice - mean(test$totalPrice))^2)
 
 metricas_test <- data.frame(
   MAE = mae,
@@ -402,9 +413,9 @@ cat("\nMétricas en test:\n")
 print(metricas_test)
 
 resultados_test <- data.frame(
-  Real = test$price,
+  Real = test$totalPrice,
   Predicho = pred_test,
-  Error = test$price - pred_test
+  Error = test$totalPrice - pred_test
 )
 
 ggplot(resultados_test, aes(x = Real, y = Predicho)) +
@@ -462,14 +473,14 @@ print(modelo_cv)
 # ==============================================================================
 
 modelo_log <- lm(
-  update(formula(modelo_step), log(price) ~ .),
+  update(formula(modelo_step), log(totalPrice) ~ .),
   data = dd
 )
 
 cat("\nResumen del modelo log-lineal:\n")
 print(summary(modelo_log))
 
-ggfortify::autoplot(modelo_log) +
+autoplot(modelo_simple) +
   theme_minimal()
 
 # ==============================================================================
@@ -477,7 +488,7 @@ ggfortify::autoplot(modelo_log) +
 # ==============================================================================
 
 formula_cuadratica <- as.formula(
-  paste("price ~", x_simple, "+ I(", x_simple, "^2)")
+  paste("totalPrice ~", x_simple, "+ I(", x_simple, "^2)")
 )
 
 modelo_cuadratico <- lm(formula_cuadratica, data = dd)
@@ -609,7 +620,7 @@ cat("\n============================================================\n")
 cat("RESUMEN FINAL\n")
 cat("============================================================\n")
 
-cat("\nVariable respuesta: price\n")
+cat("\nVariable respuesta: totalPrice\n")
 
 cat("\nModelo simple usado:\n")
 print(formula_simple)
