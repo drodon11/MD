@@ -2,9 +2,6 @@
 library(MASS)
 library(FactoMineR)
 
-# ==============================================================================
-# 0. CARGA DE DATOS
-# ==============================================================================
 input_path <- file.path(getwd(), "data", "interim", "flightprices_preprocessed.rds")
 vuelos <- readRDS(input_path)
 
@@ -39,9 +36,8 @@ print(table(vuelos$airline))
 
 
 # ==============================================================================
-# 1. MODELO LDA (Script original adaptado)
+#                                      LDA
 # ==============================================================================
-# Cambia los nombres de la derecha del '~' por los nombres exactos de tus 7 numéricas
 vuelos.lda <- lda(airline ~ elapsedDays + taxAmount + totalPrice + seatsLeft + 
                     travelDistance + segmentDistance + layoverNumber, data = vuelos)
 
@@ -54,8 +50,6 @@ vuelos.lda$scaling[,1]
 vuelos.lda$scaling[,1:2]
 
 # valors de cada cas per la primera funcio discriminant
-# IMPORTANTE: vuelos[2:8] asume que de la columna 2 a la 8 están tus numéricas. 
-# Si tienes más columnas, ajusta los índices.
 vuelos.lda.values <- predict(vuelos.lda, vuelos[2:8])
 
 vuelos$LDA2 <- vuelos.lda.values$x[,2]
@@ -160,10 +154,10 @@ hist(vuelos.lda.values$x[,2])
 hist(vuelos.lda.values$x[,1])
 
 # histograma multiple entre la funcio discriminant i la resposta
-par("mar")
-par(mar=c(1,1,1,1))
-par(mar=c(5.1,4.1,4.1,2.1))
-par(mar=c(3,2.5,1.5,1))
+#par("mar")
+#par(mar=c(1,1,1,1))
+#par(mar=c(5.1,4.1,4.1,2.1))
+#par(mar=c(3,2.5,1.5,1))
 
 pdf("Histogramas_LDA1.pdf", width = 8, height = 15)
 par(mar=c(3, 3, 2, 1))
@@ -241,7 +235,7 @@ printMeanAndSdByGroup(vuelos.lda.values$x, vuelos[1])
 
 
 # ==============================================================================
-# 2. SEGUNDA PARTE DEL SCRIPT (PREPROCESAMIENTO Y QDA)
+#                     PREPOCESAMIENTO & QDA
 # ==============================================================================
 list.of.packages <-c("caret", "MASS", "klaR", "ggplot2", "ggpubr") 
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
@@ -259,7 +253,6 @@ train <- vuelos[muestra, ]
 test <- vuelos[-muestra, ]
 
 # Estimació dels paràmetres de preprocessament 
-# Asegúrate de poner aquí tus nombres reales si has tenido que cambiarlos arriba
 vars_para_escalar <- c("elapsedDays", "taxAmount", "totalPrice", "seatsLeft", 
                        "travelDistance", "segmentDistance", "layoverNumber")
 
@@ -304,7 +297,7 @@ mean(predicciones_lda$class == test$airline)
 
 
 # ==============================================================================
-# ANALISIS DISCRIMINANT CUADRÀTIC (QDA)
+#                                    QDA 
 # ==============================================================================
 options(digits = 4)
 # Excluimos seatsLeft porque la varianza es 0 en Frontier Airlines
