@@ -235,82 +235,96 @@ printMeanAndSdByGroup(vuelos.lda.values$x, vuelos[1])
 
 
 # ==============================================================================
-#                     PREPOCESAMIENTO & QDA
+#                      PREPOCESAMIENTO & CARGA DE DATOS
 # ==============================================================================
-list.of.packages <-c("caret", "MASS", "klaR", "ggplot2", "ggpubr") 
+list.of.packages <- c("caret", "MASS", "klaR", "ggplot2", "ggpubr", "reshape2") 
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages) > 0) {
   install.packages(new.packages)
 }
-lapply(list.of.packages, require, character.only = T)
-rm(list.of.packages, new.packages)
+invisible(lapply(list.of.packages, require, character.only = TRUE))
 
-# Dividim les dades: 80% entrenament i 20% test
-set.seed(1994)
+load("data/interim/model_data.RData")
 
-muestra <- caret::createDataPartition(y = vuelos[, "airline"], p = 0.8, list = FALSE)
-train <- vuelos[muestra, ]
-test <- vuelos[-muestra, ]
+# Asegurarnos de que las clases son factor
+train_df$airline <- as.factor(train_df$airline)
+test_df$airline <- as.factor(test_df$airline)
 
-# Estimació dels paràmetres de preprocessament 
+
+# ESCALADO DE DATOS
 vars_para_escalar <- c("elapsedDays", "taxAmount", "totalPrice", "seatsLeft", 
                        "travelDistance", "segmentDistance", "layoverNumber")
 
-preproc_param <- caret::preProcess(x = train[, vars_para_escalar], method = c("center", "scale"))
+# Entrenamos el escalador SOLO con el train_df
+preproc_param <- caret::preProcess(x = train_df[, vars_para_escalar], method = c("center", "scale"))
 
-# Transformem les dades
-train[, vars_para_escalar] <- preproc_param |> predict(train[, vars_para_escalar])
-test[, vars_para_escalar] <- preproc_param |> predict(test[, vars_para_escalar])
+# Transformamos train_df y test_df
+train_df[, vars_para_escalar] <- predict(preproc_param, train_df[, vars_para_escalar])
+test_df[, vars_para_escalar]  <- predict(preproc_param, test_df[, vars_para_escalar])
 
-# Densidades bivariantes
-p1 <- ggplot(data = train, aes(x = totalPrice, fill = airline, colour = airline)) +
+# Densidades bivariantes (Usando train_df)
+p1 <- ggplot(data = train_df, aes(x = totalPrice, fill = airline, colour = airline)) +
   geom_density(alpha = 0.3) + theme_bw()
-p2 <- ggplot(data = train, aes(x = travelDistance, fill = airline, colour = airline)) +
+p2 <- ggplot(data = train_df, aes(x = travelDistance, fill = airline, colour = airline)) +
   geom_density(alpha = 0.3) + theme_bw()
-p3 <- ggplot(data = train, aes(x = taxAmount, fill = airline, colour = airline)) +
+p3 <- ggplot(data = train_df, aes(x = taxAmount, fill = airline, colour = airline)) +
   geom_density(alpha = 0.3) + theme_bw()
-p4 <- ggplot(data = train, aes(x = elapsedDays, fill = airline, colour = airline)) +
+p4 <- ggplot(data = train_df, aes(x = elapsedDays, fill = airline, colour = airline)) +
   geom_density(alpha = 0.3) + theme_bw()
 
 ggarrange(p1, p2, p3, p4, ncol = 2, nrow = 2, common.legend = TRUE, legend = "bottom")
 
-# Pairs plot
-pairs(x = train[, c("totalPrice", "travelDistance", "taxAmount", "elapsedDays")], 
-      col = as.numeric(train[, 'airline']), pch = 20)
+# Pairs plot (Usando train_df)
+pairs(x = train_df[, c("totalPrice", "travelDistance", "taxAmount", "elapsedDays")], 
+      col = as.numeric(train_df[, 'airline']), pch = 20)
 
+
+# ==============================================================================
+#                                   LDA 2
+# ==============================================================================
 options(digits = 4)
+
+# Entrenamos LDA con train_df
 modelo_lda2 <- lda(airline ~ elapsedDays + taxAmount + totalPrice + seatsLeft + 
-                     travelDistance + segmentDistance + layoverNumber, data = train)
+                     travelDistance + segmentDistance + layoverNumber, data = train_df)
 modelo_lda2
 
-datos_lda <- cbind(train, predict(modelo_lda2)$x)
+# Gráfico LDA
+datos_lda <- cbind(train_df, predict(modelo_lda2)$x)
 ggplot(datos_lda, aes(LD1, LD2)) +
   geom_point(aes(color = airline)) +
-  ggtitle("Gráfico LDA")
+  ggtitle("Gráfico LDA (Train Set)")
 
-klaR::partimat(airline ~ totalPrice + travelDistance, data = train, method = "lda", 
-               image.colors = heat.colors(length(levels(train$airline))), col.mean = "black")
+klaR::partimat(airline ~ totalPrice + travelDistance, data = train_df, method = "lda", 
+               image.colors = heat.colors(length(levels(train_df$airline))), col.mean = "black")
 
-predicciones_lda <- modelo_lda2 |> predict(test)
-table(test$airline, predicciones_lda$class, dnn = c("Grupo real", "Grupo pronosticado"))
-mean(predicciones_lda$class == test$airline)
+# Predicciones sobre test_df
+predicciones_lda <- predict(modelo_lda2, test_df)
+table(test_df$airline, predicciones_lda$class, dnn = c("Grupo real", "Grupo pronosticado"))
+
+cat(sprintf("Accuracy LDA: %.4f\n", mean(predicciones_lda$class == test_df$airline)))
 
 
 # ==============================================================================
 #                                    QDA 
 # ==============================================================================
 options(digits = 4)
-# Excluimos seatsLeft porque la varianza es 0 en Frontier Airlines
+
+# Entrenamos QDA con train_df (excluimos seatsLeft)
 modelo_qda <- qda(airline ~ elapsedDays + taxAmount + totalPrice + 
-                    travelDistance + segmentDistance + layoverNumber, data = train)
+                    travelDistance + segmentDistance + layoverNumber, data = train_df)
 modelo_qda
 
-partimat(airline ~ totalPrice + travelDistance, data = train, method = "qda", 
-         image.colors = heat.colors(length(levels(train$airline))), col.mean = "black")
+partimat(airline ~ totalPrice + travelDistance, data = train_df, method = "qda", 
+         image.colors = heat.colors(length(levels(train_df$airline))), col.mean = "black")
 
-predicciones_qda <- modelo_qda |> predict(test)
-matriz_confusion <- table(test$airline, predicciones_qda$class, dnn = c("Grupo real", "Grupo pronosticado"))
-matriz_confusion <- reshape2::melt(matriz_confusion)
-matriz_confusion <- caret::confusionMatrix(factor(predicciones_qda$class, levels=levels(test$airline)), 
-                                           factor(test$airline, levels=levels(test$airline)))
-matriz_confusion
+# Predicciones sobre test_df
+predicciones_qda <- predict(modelo_qda, test_df)
+
+# Matriz de confusión estilo caret
+matriz_confusion_qda <- caret::confusionMatrix(
+  factor(predicciones_qda$class, levels=levels(test_df$airline)), 
+  factor(test_df$airline, levels=levels(test_df$airline))
+)
+
+print(matriz_confusion_qda)
