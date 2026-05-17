@@ -221,7 +221,7 @@ ggplot(conteo_reglas, aes(x = soporte, y = n_reglas, color = factor(confianza)))
   theme_minimal()
 
 #---------------------
-#confianza: 0.6 y soporte 1
+#confianza: 0.6 y soporte 2%
 #---------------------
 
 
@@ -231,7 +231,7 @@ cat("\n--- 6. APRIORI: EXTRACCIÓN GENERAL DE REGLAS ---\n")
 reglas <- apriori(
   trans,
   parameter = list(
-    supp   = 0.01,
+    supp   = 0.02,
     conf   = 0.60,
     minlen = 2,
     maxlen = 5
@@ -292,7 +292,7 @@ plot(
 )
 
 # Gráfico agrupado
-plot(reglas_top20, method = "grouped", main = "Reglas agrupadas por consecuente")
+#plot(reglas_top20, method = "grouped", main = "Reglas agrupadas por consecuente")
 
 # ---------- 9. FILTRADO DE REGLAS ----------
 cat("\n--- 9. FILTRADO DE REGLAS ---\n")
@@ -305,6 +305,8 @@ reglas_precio_alto <- apriori(
   appearance = list(rhs = "precio_grupo=precio_alto", default = "lhs"),
   control    = list(verbose = FALSE)
 )
+
+reglas_precio_alto <- reglas_precio_alto[!is.redundant(reglas_precio_alto)]
 reglas_precio_alto <- sort(reglas_precio_alto, by = "lift", decreasing = TRUE)
 inspect(head(reglas_precio_alto, 15))
 
@@ -316,6 +318,9 @@ reglas_precio_bajo <- apriori(
   appearance = list(rhs = "precio_grupo=precio_bajo", default = "lhs"),
   control    = list(verbose = FALSE)
 )
+
+reglas_precio_bajo <- reglas_precio_bajo[!is.redundant(reglas_precio_bajo)]
+
 reglas_precio_bajo <- sort(reglas_precio_bajo, by = "lift", decreasing = TRUE)
 inspect(head(reglas_precio_bajo, 15))
 
