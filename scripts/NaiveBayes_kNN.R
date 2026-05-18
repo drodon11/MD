@@ -56,55 +56,46 @@ MC_kernel <- table(Prediccion = pred_kernel, Real = test_df$airline)
 print(MC_kernel)
 cat(sprintf("Accuracy Kernel: %.4f\n", sum(diag(MC_kernel))/sum(MC_kernel)))
 
-# ==============================================================================
-#                              kNN CLASIFICACIÓN
-# ==============================================================================
-# El paquete VIM clasifica imputando valores perdidos (NA). 
-# Para usarlo, debemos juntar train y test, y poner la clase del test como NA.
-
+cat("\n======================================================\n")
+cat("          2. kNN CLASIFICACIÓN (Paquete VIM)\n")
+cat("======================================================\n")
 # Unimos los datos temporalmente
 df_aux <- rbind(train_df[, c("airline", vars_num)], 
                 test_df[, c("airline", vars_num)])
 
-# Identificamos qué filas corresponden al test y las marcamos como NA en la variable respuesta
+# Identificamos qué filas corresponden al test y las marcamos como NA 
 test_idx <- (nrow(train_df) + 1):nrow(df_aux)
 df_aux$airline[test_idx] <- NA
 
 
-# -- kNN estándar por defecto --
-cat("\n--- kNN (K=5 por defecto, sin pesos) ---\n")
-result_knn <- kNN(df_aux, metric = "gower", variable = "airline")
+# -- kNN estándar por defecto (K=5) --
+cat("\n--- kNN (K=5 por defecto) ---\n")
+result_knn <- kNN(df_aux, variable = "airline")
 table(Prediccion = result_knn$airline[test_idx], Real = test_df$airline)
 
 # -- kNN con k=3 --
-cat("\n--- kNN (K=3, sin pesos) ---\n")
-result_knn3 <- kNN(df_aux, metric = "gower", variable = "airline", k = 3)
+cat("\n--- kNN (K=3) ---\n")
+result_knn3 <- kNN(df_aux, variable = "airline", k = 3)
 table(Prediccion = result_knn3$airline[test_idx], Real = test_df$airline)
 
 # -- kNN con k=1 --
-cat("\n--- kNN (K=1, sin pesos) ---\n")
-result_knn1 <- kNN(df_aux, metric = "gower", variable = "airline", k = 1)
+cat("\n--- kNN (K=1) ---\n")
+result_knn1 <- kNN(df_aux, variable = "airline", k = 1)
 table(Prediccion = result_knn1$airline[test_idx], Real = test_df$airline)
 
-# -- kNN con k=3 y Distancia Ponderada (weightDist = T) --
-cat("\n--- kNN (K=3, CON pesos de distancia) ---\n")
-result_knnw3 <- kNN(df_aux, metric = "gower", variable = "airline", k = 3, weightDist = TRUE)
-table(Prediccion = result_knnw3$airline[test_idx], Real = test_df$airline)
 
-
-# ==============================================================================
-#                                  kNN REGRESSION
-# ==============================================================================
-# Predecimos totalPrice en lugar de airline
+cat("\n======================================================\n")
+cat("          3. kNN REGRESIÓN (Predicción de totalPrice)\n")
+cat("======================================================\n")
 df_reg <- rbind(train_df[, c("airline", vars_num)], 
                 test_df[, c("airline", vars_num)])
 
-# Guardamos los valores reales y los ocultamos en el dataset de imputación
+# Guardamos los valores reales y ocultamos los del test
 y_real <- test_df$totalPrice
 df_reg$totalPrice[test_idx] <- NA
 
-# Ejecutamos kNN para estimar el precio
-result_reg <- kNN(df_reg, metric = "gower", variable = "totalPrice", k = 1, weightDist = TRUE)
+# Ejecutamos kNN para estimar el precio (K=1)
+result_reg <- kNN(df_reg, variable = "totalPrice", k = 1)
 
 y_pred <- result_reg$totalPrice[test_idx]
 
@@ -112,7 +103,7 @@ y_pred <- result_reg$totalPrice[test_idx]
 par(mfrow=c(1,2))
 plot(y_pred, y_real, main = "kNN Regresión: Predicho vs Real", 
      xlab = "Predicción de Precio", ylab = "Precio Real", col = "blue", pch = 20)
-abline(0, 1, col = "red", lwd = 2) # Línea ideal
+abline(0, 1, col = "red", lwd = 2) # Línea ideal (lo predicho = lo real)
 
 plot(y_pred - y_real, main = "Errores Residuales", 
      ylab = "Diferencia (Predicho - Real)", col = "darkgreen", pch = 20)
