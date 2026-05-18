@@ -1,5 +1,5 @@
 # =========================================================================
-# DECISION TREES (CART): Clasificación y Regresión — Flight Prices
+# 14. DECISION TREES (CART): Clasificación y Regresión — Flight Prices
 # =========================================================================
 
 # --- 0. SETUP Y CARGA DE DATOS ---
@@ -12,7 +12,7 @@ invisible(lapply(list.of.packages, require, character.only = TRUE))
 
 load("data/interim/model_data.RData")
 
-# Eliminar niveles vacíos del factor target para evitar errores en rpart
+# Eliminar niveles vacíos del factor target para evitar errores internos en rpart
 train_df$economy_f <- droplevels(train_df$economy_f)
 test_df$economy_f  <- droplevels(test_df$economy_f)
 
@@ -24,14 +24,13 @@ cat("\n======================================================\n")
 cat("      DECISION TREE: CLASIFICACIÓN\n")
 cat("======================================================\n")
 
-# taxAmount excluida por data leakage; log_price excluida por ser target de regresión
-pred_class    <- predictores[!predictores %in% c("log_price", "taxAmount")]
+# Usamos totalPrice directo y nuestro bloque de predictores base
 formula_class <- as.formula(paste("economy_f ~ totalPrice +", paste(pred_base, collapse = " + ")))
 
 # --- Árbol base ---
 set.seed(1994)
 tree <- rpart(formula_class, data = train_df, method = "class", 
-               control = rpart.control(cp = 0.001, minsplit = 20))
+              control = rpart.control(cp = 0.001, minsplit = 20))
 
 cat("\n--- RESUMEN DEL ÁRBOL BASE ---\n")
 summary(tree)
@@ -121,9 +120,6 @@ model_cv <- train(
 cat("\n--- MEJOR HIPERPARÁMETRO (CP) ---\n")
 print(model_cv$bestTune)
 
-cat("\n--- MODELO FINAL ---\n")
-print(model_cv$finalModel)
-
 # --- Árbol del modelo tuneado ---
 rpart.plot(model_cv$finalModel,
            main = "Árbol Tuneado con CV (mejor CP)",
@@ -176,13 +172,12 @@ rpart.plot(prunedtree,
 
 # =========================================================================
 # 4. DECISION BOUNDARY — Proyección 2D sobre PC1 y PC2
-#    Fondo: fronteras de clasificación aprendidas por el árbol
-#    Puntos: clase real de cada observación (aciertos y errores visibles)
 # =========================================================================
 cat("\n--- DECISION BOUNDARY (ESPACIO PCA) ---\n")
 
 vars_num <- c("travelDistance", "layoverNumber", "elapsedDays", "seatsLeft")
-if ("log_price" %in% names(train_df)) vars_num <- c("log_price", vars_num)
+# Proyectamos usando el precio real
+if ("totalPrice" %in% names(train_df)) vars_num <- c("totalPrice", vars_num)
 
 pca_res <- prcomp(train_df[, vars_num], scale. = TRUE)
 
@@ -219,14 +214,14 @@ print(p_boundary)
 
 
 # =========================================================================
-# 5. ÁRBOL DE REGRESIÓN — Target: log_price
+# 5. ÁRBOL DE REGRESIÓN — Target: totalPrice
 # =========================================================================
 cat("\n======================================================\n")
-cat("      DECISION TREE: REGRESIÓN (log_price)\n")
+cat("      DECISION TREE: REGRESIÓN (totalPrice)\n")
 cat("======================================================\n")
 
-pred_reg    <- predictores[!predictores %in% c("log_price", "taxAmount")]
-formula_reg <- as.formula(paste("log_price ~", paste(pred_reg, collapse = " + ")))
+# Inyectamos nuestro vector pred_base directamente en la fórmula contra totalPrice
+formula_reg <- as.formula(paste("totalPrice ~", paste(pred_base, collapse = " + ")))
 
 set.seed(1994)
 dt_reg <- rpart(formula_reg, data = train_df,
@@ -234,7 +229,7 @@ dt_reg <- rpart(formula_reg, data = train_df,
                 control = rpart.control(cp = 0.005, maxdepth = 5))
 
 rpart.plot(dt_reg,
-           main = "Árbol de Regresión — log(Precio Vuelo)",
+           main = "Árbol de Regresión — Precio Vuelo (Euros)",
            type = 3, fallen.leaves = TRUE, shadow.col = "gray"
 )
 
@@ -257,31 +252,32 @@ print(p_imp_reg)
 
 
 # --- Métricas: RMSE, MAE, R² ---
+# Al predecir totalPrice, las métricas ahora están en EUROS absolutos
 pred_reg_test <- predict(dt_reg, test_df)
 
-rmse   <- sqrt(mean((test_df$log_price - pred_reg_test)^2))
-mae    <- mean(abs(test_df$log_price - pred_reg_test))
-ss_res <- sum((test_df$log_price - pred_reg_test)^2)
-ss_tot <- sum((test_df$log_price - mean(test_df$log_price))^2)
+rmse   <- sqrt(mean((test_df$totalPrice - pred_reg_test)^2))
+mae    <- mean(abs(test_df$totalPrice - pred_reg_test))
+ss_res <- sum((test_df$totalPrice - pred_reg_test)^2)
+ss_tot <- sum((test_df$totalPrice - mean(test_df$totalPrice))^2)
 r2     <- 1 - (ss_res / ss_tot)
 
 cat("\n--- MÉTRICAS DE REGRESIÓN (TEST) ---\n")
-cat(sprintf("  RMSE : %.4f\n", rmse))
-cat(sprintf("  MAE  : %.4f\n", mae))
+cat(sprintf("  RMSE : %.4f €\n", rmse))
+cat(sprintf("  MAE  : %.4f €\n", mae))
 cat(sprintf("  R²   : %.4f\n", r2))
 
 
 # --- Plot: Predicho vs Real ---
 p_reg <- ggplot(
-  data.frame(real = test_df$log_price, predicho = pred_reg_test),
+  data.frame(real = test_df$totalPrice, predicho = pred_reg_test),
   aes(x = real, y = predicho)
 ) +
   geom_point(alpha = 0.3, color = "#1a7a4a", size = 0.8) +
   geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
   labs(
-    title    = "Árbol de Regresión: Predicho vs Real",
-    subtitle = sprintf("R² = %.4f  |  RMSE = %.4f", r2, rmse),
-    x = "log(Precio Real)", y = "log(Precio Predicho)"
+    title    = "Árbol de Regresión: Predicho vs Real (Euros)",
+    subtitle = sprintf("R² = %.4f  |  RMSE = %.4f €", r2, rmse),
+    x = "Precio Real (€)", y = "Precio Predicho (€)"
   ) +
   theme_minimal(base_size = 13)
 print(p_reg)

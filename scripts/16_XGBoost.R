@@ -4,7 +4,7 @@
 
 rm(list=ls())
 
-# 0. Carga de librerías (Añadidos DiagrammeR, pdp y tidyr por requerimiento)
+# 0. Carga de librerías
 list.of.packages <- c("xgboost", "caret", "ggplot2", "dplyr", "tidyr", "pROC", "Matrix", "DiagrammeR", "pdp")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages) > 0) install.packages(new.packages, dependencies = TRUE)
@@ -16,13 +16,13 @@ load("data/interim/model_data.RData")
 # =========================================================================
 # 1. PREPARACIÓN DE DATOS (Data Leakage Prevention)
 # =========================================================================
-# Excluimos log_price (Target de regresión) y taxAmount de los predictores
+# Para CLASIFICACIÓN: Usamos totalPrice como predictor, pero excluimos log_price y taxAmount
 cols_class <- grep("log_price|taxAmount", colnames(X_train_xgb), invert = TRUE, value = TRUE)
 
 x_train_class <- X_train_xgb[, cols_class]
 x_test_class  <- X_test_xgb[, cols_class]
 
-# Matrices DMatrix optimizadas
+# Matrices DMatrix optimizadas para clasificación
 dtrain <- xgb.DMatrix(data = x_train_class, label = y_train_xgb)
 dtest  <- xgb.DMatrix(data = x_test_class, label = y_test_xgb)
 
@@ -44,20 +44,18 @@ params_class <- list(
   colsample_bytree = 0.8
 )
 
-# Entrenamiento con Watchlist para Early Stopping
 xgb_es <- xgb.train(
   params = params_class,
   data = dtrain,
   nrounds = 500,
   watchlist = list(train = dtrain, test = dtest),
-  early_stopping_rounds = 30, # Frena si el AUC en test no mejora en 30 rondas
+  early_stopping_rounds = 30, 
   verbose = 0
 )
 
 cat("Mejor iteración óptima:", xgb_es$best_iteration, "\n")
 cat("Mejor AUC en Test:", xgb_es$best_score, "\n")
 
-# Curva de aprendizaje
 eval_log <- xgb_es$evaluation_log
 p_learning <- ggplot(eval_log, aes(x = iter)) +
   geom_line(aes(y = train_auc, color = "Train")) +
@@ -73,7 +71,7 @@ print(p_learning)
 cat("\n--- TUNING CON CARET ---\n")
 
 control <- trainControl(
-  method = "cv", number = 3, # Reducido a 3-Folds para agilizar la ejecución
+  method = "cv", number = 3, 
   classProbs = TRUE, summaryFunction = twoClassSummary
 )
 
@@ -87,7 +85,6 @@ grid_xgb <- expand.grid(
   subsample = 0.8
 )
 
-# Preparamos dataframe de training con el Target como factor válido para caret
 train_xgb_df <- as.data.frame(x_train_class)
 train_xgb_df$Target <- factor(ifelse(y_train_xgb == 1, "Economy", "Premium"))
 
@@ -111,7 +108,6 @@ y_test_factor <- factor(ifelse(y_test_xgb == 1, "Economy", "Premium"), levels = 
 cat("\n--- MATRIZ DE CONFUSIÓN ---\n")
 print(confusionMatrix(pred_class, y_test_factor))
 
-# Importancia (Gain, Cover, Frequency)
 imp_matrix <- xgb.importance(feature_names = colnames(x_train_class), model = xgb_es)
 xgb.plot.importance(imp_matrix, top_n = 10, main = "Top 10 Variables (XGBoost Gain)")
 
@@ -122,12 +118,11 @@ xgb.plot.tree(feature_names = colnames(x_train_class), model = xgb_es, trees = 0
 # =========================================================================
 # 5. PARTIAL DEPENDENCE PLOT (PDP)
 # =========================================================================
-# Analizamos el impacto de travelDistance manteniendo el resto constante
 pdp_dist <- pdp::partial(
   object = xgb_es,
   pred.var = "travelDistance",
   train = x_train_class,
-  prob = TRUE, # Forzamos salida en probabilidad
+  prob = TRUE, 
   grid.resolution = 30
 )
 
@@ -143,19 +138,16 @@ print(p_pdp)
 # =========================================================================
 cat("\n--- SHAP VALUES (TEORÍA DE JUEGOS) ---\n")
 
-# Calculamos matriz SHAP sobre una muestra representativa del test
 set.seed(42)
 idx_shap <- sample(seq_len(nrow(x_test_class)), min(1000, nrow(x_test_class)))
 x_shap <- x_test_class[idx_shap, ]
 
 shap_matrix <- predict(xgb_es, x_shap, predcontrib = TRUE)
 
-# Limpieza y pivoteo
 shap_df <- as.data.frame(shap_matrix)
-shap_df$BIAS <- NULL # Eliminamos el intercepto base
+shap_df$BIAS <- NULL 
 shap_long <- shap_df %>% mutate(id = row_number()) %>% pivot_longer(-id, names_to = "variable", values_to = "shap")
 
-# Importancia SHAP Global (Media absoluta)
 shap_imp <- shap_long %>% group_by(variable) %>% summarise(mean_abs_shap = mean(abs(shap))) %>% arrange(desc(mean_abs_shap))
 
 p_shap_bar <- ggplot(head(shap_imp, 15), aes(x = mean_abs_shap, y = reorder(variable, mean_abs_shap))) +
@@ -163,7 +155,6 @@ p_shap_bar <- ggplot(head(shap_imp, 15), aes(x = mean_abs_shap, y = reorder(vari
   labs(title = "Importancia SHAP Media Absoluta", x = "|SHAP Value|", y = "") + theme_minimal()
 print(p_shap_bar)
 
-# Distribución SHAP (Boxplots)
 top_vars <- head(shap_imp$variable, 10)
 p_shap_box <- shap_long %>% filter(variable %in% top_vars) %>%
   ggplot(aes(x = shap, y = reorder(variable, abs(shap), FUN = median))) +
@@ -178,6 +169,9 @@ print(p_shap_box)
 # =========================================================================
 cat("\n--- DECISION BOUNDARY PCA ---\n")
 vars_num <- c("travelDistance", "layoverNumber", "elapsedDays", "seatsLeft")
+# Incorporamos el precio real al PCA si existe
+if ("totalPrice" %in% names(train_df)) vars_num <- c("totalPrice", vars_num)
+
 pca_res <- prcomp(train_df[, vars_num], scale. = TRUE)
 df_pca <- data.frame(PC1 = pca_res$x[, 1], PC2 = pca_res$x[, 2])
 
@@ -192,7 +186,7 @@ grid_pc2 <- seq(min(df_pca$PC2), max(df_pca$PC2), length.out = 150)
 mesh_pca <- expand.grid(PC1 = grid_pc1, PC2 = grid_pc2)
 mesh_pca$pred_class <- factor(ifelse(predict(xgb_pca, xgb.DMatrix(as.matrix(mesh_pca))) >= 0.5, "Economy", "Premium"))
 
-df_pca$economy_f <- y_test_factor[1:nrow(df_pca)] # Placeholder color
+df_pca$economy_f <- y_test_factor[1:nrow(df_pca)] 
 
 p_boundary <- ggplot() +
   geom_tile(data = mesh_pca, aes(x = PC1, y = PC2, fill = pred_class), alpha = 0.3) +
@@ -202,15 +196,21 @@ print(p_boundary)
 
 
 # =========================================================================
-# 8. XGBOOST REGRESIÓN (Target: log_price)
+# 8. XGBOOST REGRESIÓN (Target: totalPrice en Euros)
 # =========================================================================
 cat("\n======================================================\n")
-cat("      XGBOOST REGRESIÓN (log_price)\n")
+cat("      XGBOOST REGRESIÓN (totalPrice)\n")
 cat("======================================================\n")
 
-# Para regresión, el label es log_price
-dtrain_reg <- xgb.DMatrix(data = x_train_class, label = train_df$log_price)
-dtest_reg  <- xgb.DMatrix(data = x_test_class, label = test_df$log_price)
+# Para REGRESIÓN: Excluimos TODOS los precios de las variables predictoras
+cols_reg <- grep("log_price|totalPrice|taxAmount", colnames(X_train_xgb), invert = TRUE, value = TRUE)
+
+x_train_reg <- X_train_xgb[, cols_reg]
+x_test_reg  <- X_test_xgb[, cols_reg]
+
+# El Target explícito son los Euros brutos
+dtrain_reg <- xgb.DMatrix(data = x_train_reg, label = train_df$totalPrice)
+dtest_reg  <- xgb.DMatrix(data = x_test_reg, label = test_df$totalPrice)
 
 xgb_reg <- xgb.train(
   params = list(objective = "reg:squarederror", eta = 0.05, max_depth = 5),
@@ -220,12 +220,17 @@ xgb_reg <- xgb.train(
 )
 
 pred_reg <- predict(xgb_reg, dtest_reg)
-rmse <- sqrt(mean((test_df$log_price - pred_reg)^2))
-r2 <- 1 - (sum((test_df$log_price - pred_reg)^2) / sum((test_df$log_price - mean(test_df$log_price))^2))
 
-cat(sprintf("Métricas de Regresión -> RMSE: %.4f | R-Squared: %.4f\n", rmse, r2))
+# Cálculo de métricas en Euros absolutos
+rmse <- sqrt(mean((test_df$totalPrice - pred_reg)^2))
+mae <- mean(abs(test_df$totalPrice - pred_reg))
+ss_res <- sum((test_df$totalPrice - pred_reg)^2)
+ss_tot <- sum((test_df$totalPrice - mean(test_df$totalPrice))^2)
+r2 <- 1 - (ss_res / ss_tot)
 
-p_reg <- ggplot(data.frame(Real = test_df$log_price, Pred = pred_reg), aes(x = Real, y = Pred)) +
+cat(sprintf("Métricas de Regresión -> RMSE: %.4f € | MAE: %.4f € | R-Squared: %.4f\n", rmse, mae, r2))
+
+p_reg <- ggplot(data.frame(Real = test_df$totalPrice, Pred = pred_reg), aes(x = Real, y = Pred)) +
   geom_point(alpha = 0.3, color = "darkgreen") + geom_abline(color = "red", linetype = "dashed") +
-  labs(title = "XGBoost Regresión: Predicho vs Real", x = "log(Precio Real)", y = "Predicción") + theme_minimal()
+  labs(title = "XGBoost Regresión: Predicho vs Real (Euros)", x = "Precio Real (€)", y = "Precio Predicho (€)") + theme_minimal()
 print(p_reg)
