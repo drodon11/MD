@@ -310,11 +310,10 @@ cat(sprintf("Accuracy LDA: %.4f\n", mean(predicciones_lda$class == test_df$airli
 # ==============================================================================
 options(digits = 4)
 
+# Hay que agrupar las aerolíneas con pocos vuelos para que funcione el QDA
 print("Frecuencias originales en train_df:")
 print(table(train_df$airline))
 
-# Identificamos las aerolíneas "grandes" (ej. más de 50 vuelos en el train)
-# Si te sigue dando error, sube este número de 50 a 100
 conteos <- table(train_df$airline)
 aerolineas_grandes <- names(conteos[conteos > 50])
 
@@ -330,7 +329,7 @@ test_df$airline[!(test_df$airline %in% aerolineas_grandes)] <- "Otras"
 train_df$airline <- as.factor(train_df$airline)
 test_df$airline <- as.factor(test_df$airline)
 
-print("Frecuencias DESPUÉS de agrupar en train_df:")
+print("Frecuencias después de agrupar en train_df:")
 print(table(train_df$airline))
 
 # Entrenamos QDA con train_df (excluimos seatsLeft)

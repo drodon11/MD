@@ -20,7 +20,7 @@ test_df$airline <- as.factor(test_df$airline)
 # Seleccionamos las columnas numéricas que venimos usando
 vars_num <- c("elapsedDays", "taxAmount", "totalPrice", 
               "travelDistance", "segmentDistance", "layoverNumber")
-formula_class <- as.formula(paste("airline ~", paste(vars_num, collapse = " + ")))
+formula_class <- as.formula(paste("economy_f ~ log_price +", paste(pred_base, collapse = " + ")))
 
 # ==============================================================================
 #                               NAIVE BAYES
