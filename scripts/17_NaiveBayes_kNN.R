@@ -27,7 +27,7 @@ formula_class <- as.formula(paste("economy_f ~ log_price +", paste(pred_base, co
 # ==============================================================================
 
 # -- 1A. Naive Bayes Estándar --
-nb <- naive_bayes(formula_class, data = train_df)
+nb <- naive_bayes(formula_class, data = train_df, laplace = 1)
 
 # Gráficos de distribución por clase para algunas variables
 plot(nb, legend = TRUE)
@@ -40,12 +40,12 @@ print(MC_nb)
 cat(sprintf("Accuracy: %.4f\n", sum(diag(MC_nb))/sum(MC_nb)))
 
 # Mostrar tablas de probabilidad condicional (para las primeras variables)
-# tables(nb, 1:4) # Descomentar para ver las tablas en la consola
+tables(nb, 1:4) # Descomentar para ver las tablas en la consola
 
 
 # -- 1B. Naive Bayes con Kernel (Fronteras Suavizadas) --
 cat("\n--- Naive Bayes usando KERNEL ---\n")
-nb_kernel <- naive_bayes(formula_class, data = train_df, usekernel = TRUE)
+nb_kernel <- naive_bayes(formula_class, data = train_df, usekernel = TRUE, laplace = 1)
 
 # Plot de distribuciones con kernel
 plot(nb_kernel, legend = TRUE)
