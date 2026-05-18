@@ -26,8 +26,7 @@ cat("======================================================\n")
 
 # taxAmount excluida por data leakage; log_price excluida por ser target de regresión
 pred_class    <- predictores[!predictores %in% c("log_price", "taxAmount")]
-formula_class <- as.formula(paste("economy_f ~", paste(pred_class, collapse = " + ")))
-
+formula_class <- as.formula(paste("economy_f ~ totalPrice +", paste(pred_base, collapse = " + ")))
 
 # --- Árbol base ---
 set.seed(1994)

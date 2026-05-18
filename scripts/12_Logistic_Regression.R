@@ -1,36 +1,28 @@
 # -------------------------------------------------------------------------
-# 14. REGRESIÓN LOGÍSTICA: Clasificación de Basic Economy
+# 14. REGRESIÓN LOGÍSTICA: Clasificación de Economy
 # -------------------------------------------------------------------------
 
-# --- 0. PREPARACIÓN DEL ENTORNO ---
+# --- 0. PREPARACIÓN DEL ENTORNO Y CARGA DE DATOS ---
+rm(list=ls())
+
 list.of.packages <- c("tidyverse", "broom", "pROC", "caret", "ResourceSelection", "Epi")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[, "Package"])]
 if (length(new.packages) > 0) install.packages(new.packages)
 invisible(lapply(list.of.packages, require, character.only = TRUE))
 
-# Carga de la matriz topológica validada por el profesor
-dd <- readRDS("data/interim/flightprices_preprocessed.rds")
+# Carga de la partición centralizada
+load("data/interim/model_data.RData")
 
-# En tu dataset, economy viene de isBasicEconomy y puede estar como factor FALSE/TRUE
-# Lo convertimos correctamente a 0/1
-dd$economy_num <- ifelse(as.character(dd$economy) == "TRUE", 1, 0)
-dd$economy_f <- factor(ifelse(dd$economy_num == 1, "Sí", "No"), levels = c("No", "Sí"))
+# Compatibilidad de variables
+dd <- train_df
 
-# Comprobación: ROC y matriz de confusión necesitan dos clases
-cat("\n--- COMPROBACIÓN DE LA VARIABLE OBJETIVO ---\n")
-print(table(dd$economy, useNA = "ifany"))
-print(table(dd$economy_num, useNA = "ifany"))
-print(table(dd$economy_f, useNA = "ifany"))
-
-if (length(unique(na.omit(dd$economy_num))) < 2) {
-  stop("La variable objetivo economy_num solo tiene una clase. Revisa los valores de dd$economy.")
-}
-
+# Forzamos la creación de la variable numérica 0/1 para el motor glm basándonos en la factorizada
+dd$economy_num <- ifelse(dd$economy_f == "Economy", 1, 0)
+test_df$economy_num <- ifelse(test_df$economy_f == "Economy", 1, 0)
 
 # --- 1. ESPECIFICACIÓN Y AJUSTE DEL MODELO (14.a, 14.b, 14.c) ---
 # Aplicamos transformación logarítmica al precio para linealizar el logit
-formula_logistica <- economy_num ~ log(totalPrice) + travelDistance + layoverNumber + 
-  airline + nonStop + elapsedDays + seatsLeft
+formula_logistica <- as.formula(paste("economy_num ~ log_price +", paste(pred_base, collapse = " + ")))
 
 modelo_logit <- glm(formula_logistica, data = dd, family = binomial)
 

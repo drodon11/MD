@@ -1,56 +1,24 @@
 # ==============================================================================
 #        MODELOS LINEALES - FLIGHT PRICES
 # ==============================================================================
-
 rm(list = ls())
 
 # ==============================================================================
-# 1. PAQUETES
+# 1. PAQUETES Y CARGA DE DATOS CENTRALIZADA
 # ==============================================================================
-
-list.of.packages <- c(
-  "dplyr",
-  "ggplot2",
-  "tidyr",
-  "tibble",
-  "GGally",
-  "caret",
-  "car",
-  "lmtest",
-  "ggfortify"
-)
-
-new.packages <- list.of.packages[
-  !(list.of.packages %in% installed.packages()[, "Package"])
-]
-
-if (length(new.packages) > 0) {
-  install.packages(new.packages)
-}
-
+list.of.packages <- c("dplyr", "ggplot2", "tidyr", "tibble", "GGally", "caret", "car", "lmtest", "ggfortify")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[, "Package"])]
+if (length(new.packages) > 0) install.packages(new.packages)
 invisible(lapply(list.of.packages, require, character.only = TRUE))
 
-rm(list.of.packages, new.packages)
+# Carga del Data Bundle (Partición 80/20)
+load("data/interim/model_data.RData")
 
-# ==============================================================================
-# 2. CARGA DEL DATASET
-# ==============================================================================
+# Para mantener la compatibilidad con el resto del script, asignamos el train_df a 'dd'
+dd <- train_df
 
-input_path <- file.path(getwd(), "data", "interim", "flightprices_preprocessed.rds")
-
-dd <- readRDS(input_path)
-
-cat("\nDimensiones del dataset original:\n")
+cat("\nDimensiones del dataset de entrenamiento:\n")
 print(dim(dd))
-
-cat("\nNombres de variables:\n")
-print(names(dd))
-
-cat("\nEstructura del dataset:\n")
-str(dd)
-
-cat("\nResumen del dataset:\n")
-print(summary(dd))
 
 # ==============================================================================
 # 3. PREPARACION INICIAL
