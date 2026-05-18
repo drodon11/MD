@@ -14,7 +14,13 @@ invisible(lapply(list.of.packages, require, character.only = TRUE))
 dd <- readRDS("data/interim/flightprices_preprocessed.rds")
 
 # 2. Definición de Targets y Predictores
-dd$economy_f <- factor(ifelse(dd$economy %in% c("Basic Economy", "Economy"), "Economy", "Premium"))
+val_economy <- as.character(dd$economy)
+dd$economy_f <- factor(
+  ifelse(val_economy %in% c("1", "TRUE", "True", "true", "Basic Economy", "Economy"), 
+         "Economy", 
+         "Premium"), 
+  levels = c("Premium", "Economy")
+)
 dd$log_price <- log(dd$totalPrice)
 
 predictores <- c("log_price", "travelDistance", "layoverNumber", "airline", "nonStop", "elapsedDays", "seatsLeft")
