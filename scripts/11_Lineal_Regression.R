@@ -1,27 +1,47 @@
 # ==============================================================================
-#        MODELOS LINEALES - FLIGHT PRICES
+#        LINEAR MODELS - FLIGHT PRICES
 # ==============================================================================
+
 rm(list = ls())
 
 # ==============================================================================
-# 1. PAQUETES Y CARGA DE DATOS CENTRALIZADA
+# 1. PACKAGES AND CENTRALIZED DATA LOADING
 # ==============================================================================
-list.of.packages <- c("dplyr", "ggplot2", "tidyr", "tibble", "GGally", "caret", "car", "lmtest", "ggfortify")
-new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[, "Package"])]
-if (length(new.packages) > 0) install.packages(new.packages)
+
+list.of.packages <- c(
+  "dplyr", "ggplot2", "tidyr", "tibble", "GGally",
+  "caret", "car", "lmtest", "ggfortify"
+)
+
+new.packages <- list.of.packages[
+  !(list.of.packages %in% installed.packages()[, "Package"])
+]
+
+if (length(new.packages) > 0) {
+  install.packages(new.packages)
+}
+
 invisible(lapply(list.of.packages, require, character.only = TRUE))
 
-# Carga del Data Bundle (Partición 80/20)
+# Load the Data Bundle: 80/20 partition
 load("data/interim/model_data.RData")
 
-# Para mantener la compatibilidad con el resto del script, asignamos el train_df a 'dd'
-dd <- train_df
+cat("\n================ CHECK DATA LOADED ================\n")
+cat("Rows in train_df:", nrow(train_df), "\n")
+cat("Rows in test_df:", nrow(test_df), "\n")
+cat("Total rows train + test:", nrow(train_df) + nrow(test_df), "\n")
+cat("Columns in train_df:", ncol(train_df), "\n")
+cat("Columns in test_df:", ncol(test_df), "\n")
+cat("===================================================\n")
 
-cat("\nDimensiones del dataset de entrenamiento:\n")
+# To keep compatibility with the rest of the script, we use the full dataset
+dd <- bind_rows(train_df, test_df)
+
+cat("\nDimensions of the full modelling dataset:\n")
 print(dim(dd))
 
 # ==============================================================================
-# 3. PREPARACION INICIAL
+# 3. INITIAL PREPARATION
 # ==============================================================================
 
 dd <- na.omit(dd)
@@ -33,180 +53,183 @@ dd <- dd |>
   )
 
 if (!("totalPrice" %in% names(dd))) {
-  stop("No existe una variable llamada 'totalPrice'. Revisa el nombre exacto de la variable objetivo.")
+  stop("Variable 'totalPrice' does not exist. Check the exact name of the response variable.")
 }
 
 dd$totalPrice <- as.numeric(dd$totalPrice)
 
-tipos <- sapply(dd, class)
+# Remove variables that may introduce data leakage
+dd <- dd |> select(-any_of(c("taxAmount", "log_price")))
 
-varCat <- names(tipos)[tipos %in% c("character", "factor")]
-varNum <- names(tipos)[tipos %in% c("integer", "numeric")]
-varNumPred <- setdiff(varNum, "totalPrice")
+types <- sapply(dd, class)
 
-cat("\nDimensiones después de eliminar missing values:\n")
+cat_vars <- names(types)[types %in% c("character", "factor")]
+num_vars <- names(types)[types %in% c("integer", "numeric")]
+num_predictors <- setdiff(num_vars, "totalPrice")
+
+cat("\nDimensions after removing missing values:\n")
 print(dim(dd))
 
-cat("\nVariables categóricas:\n")
-print(varCat)
+cat("\nCategorical variables:\n")
+print(cat_vars)
 
-cat("\nVariables numéricas:\n")
-print(varNum)
+cat("\nNumerical variables:\n")
+print(num_vars)
 
-cat("\nVariables numéricas predictoras:\n")
-print(varNumPred)
+cat("\nNumerical predictor variables:\n")
+print(num_predictors)
 
-tabla_variables <- data.frame(
+variable_table <- data.frame(
   Variable = names(dd),
-  Tipo = sapply(dd, class)
+  Type = sapply(dd, class)
 )
 
-cat("\nTabla de variables:\n")
-print(tabla_variables)
+cat("\nVariable table:\n")
+print(variable_table)
 
 # ==============================================================================
-# 4. ANALISIS EXPLORATORIO
+# 4. EXPLORATORY ANALYSIS
 # ==============================================================================
 
 ggplot(dd, aes(x = totalPrice)) +
   geom_histogram(bins = 40, fill = "steelblue", color = "white") +
   labs(
-    title = "Distribución del precio total de los vuelos",
-    x = "Precio total",
-    y = "Frecuencia"
+    title = "Distribution of total flight price",
+    x = "Total price",
+    y = "Frequency"
   ) +
   theme_minimal()
 
 ggplot(dd, aes(y = totalPrice)) +
   geom_boxplot(fill = "lightblue") +
   labs(
-    title = "Boxplot del precio total de los vuelos",
-    y = "Precio total"
+    title = "Boxplot of total flight price",
+    y = "Total price"
   ) +
   theme_minimal()
 
-if (length(varNum) > 1) {
-  cor_matrix <- cor(dd[, varNum], use = "complete.obs")
-  cat("\nMatriz de correlaciones:\n")
+if (length(num_vars) > 1) {
+  cor_matrix <- cor(dd[, num_vars], use = "complete.obs")
+  cat("\nCorrelation matrix:\n")
   print(round(cor_matrix, 3))
 }
 
-vars_ggpairs <- head(varNum, 6)
+vars_ggpairs <- head(num_vars, 6)
 
 if (length(vars_ggpairs) >= 2) {
   GGally::ggpairs(dd, columns = vars_ggpairs)
 }
 
 # ==============================================================================
-# 5. SELECCION DE VARIABLE PARA MODELO SIMPLE
+# 5. VARIABLE SELECTION FOR SIMPLE MODEL
 # ==============================================================================
 
-if ("travelDistance" %in% varNumPred) {
+if ("travelDistance" %in% num_predictors) {
   x_simple <- "travelDistance"
-} else if ("seatsLeft" %in% varNumPred) {
+} else if ("seatsLeft" %in% num_predictors) {
   x_simple <- "seatsLeft"
-} else if ("elapsedDays" %in% varNumPred) {
+} else if ("elapsedDays" %in% num_predictors) {
   x_simple <- "elapsedDays"
-} else if ("baseFare" %in% varNumPred) {
+} else if ("baseFare" %in% num_predictors) {
   x_simple <- "baseFare"
 } else {
-  x_simple <- varNumPred[1]
+  x_simple <- num_predictors[1]
 }
 
-cat("\nVariable usada para el modelo simple:\n")
+cat("\nVariable used for the simple model:\n")
 print(x_simple)
 
-grafico_simple <- ggplot(dd, aes(x = .data[[x_simple]], y = totalPrice)) +
+simple_plot <- ggplot(dd, aes(x = .data[[x_simple]], y = totalPrice)) +
   geom_point(alpha = 0.4) +
   labs(
-    title = paste("Precio total frente a", x_simple),
+    title = paste("Total price versus", x_simple),
     x = x_simple,
-    y = "Precio total"
+    y = "Total price"
   ) +
   theme_minimal()
 
-print(grafico_simple)
+print(simple_plot)
 
 # ==============================================================================
-# 6. REGRESION LINEAL SIMPLE
+# 6. SIMPLE LINEAR REGRESSION
 # ==============================================================================
 
 formula_simple <- as.formula(
   paste("totalPrice ~", x_simple)
 )
 
-modelo_simple <- lm(formula_simple, data = dd)
+simple_model <- lm(formula_simple, data = dd)
 
-cat("\nResumen del modelo lineal simple:\n")
-print(summary(modelo_simple))
+cat("\nSimple linear model summary:\n")
+print(summary(simple_model))
 
-cat("\nCoeficientes del modelo simple:\n")
-print(coef(modelo_simple))
+cat("\nSimple model coefficients:\n")
+print(coef(simple_model))
 
-grafico_simple +
+simple_plot +
   geom_smooth(method = "lm", se = TRUE, color = "red")
 
-cat("\nPrimeros residuos del modelo simple:\n")
+cat("\nFirst residuals of the simple model:\n")
 print(head(data.frame(
-  observado = dd$totalPrice,
-  ajustado = fitted(modelo_simple),
-  residuo = residuals(modelo_simple)
+  observed = dd$totalPrice,
+  fitted = fitted(simple_model),
+  residual = residuals(simple_model)
 )))
 
-autoplot(modelo_simple) +
+autoplot(simple_model) +
   theme_minimal()
 
-cat("\nTest de Breusch-Pagan para homocedasticidad:\n")
-print(lmtest::bptest(modelo_simple))
+cat("\nBreusch-Pagan test for homoscedasticity:\n")
+print(lmtest::bptest(simple_model))
 
-residuos_simple <- residuals(modelo_simple)
+simple_residuals <- residuals(simple_model)
 
 set.seed(2108)
 
-cat("\nTest de normalidad de Shapiro-Wilk:\n")
-if (length(residuos_simple) > 5000) {
-  print(shapiro.test(sample(residuos_simple, 5000)))
+cat("\nShapiro-Wilk normality test:\n")
+if (length(simple_residuals) > 5000) {
+  print(shapiro.test(sample(simple_residuals, 5000)))
 } else {
-  print(shapiro.test(residuos_simple))
+  print(shapiro.test(simple_residuals))
 }
 
-cat("\nR2 modelo simple:\n")
-print(summary(modelo_simple)$r.squared)
+cat("\nR2 simple model:\n")
+print(summary(simple_model)$r.squared)
 
-cat("\nR2 ajustado modelo simple:\n")
-print(summary(modelo_simple)$adj.r.squared)
+cat("\nAdjusted R2 simple model:\n")
+print(summary(simple_model)$adj.r.squared)
 
-cat("\nIntervalos de confianza modelo simple:\n")
-print(confint(modelo_simple))
+cat("\nConfidence intervals simple model:\n")
+print(confint(simple_model))
 
-nuevo_vuelo_simple <- data.frame(
-  valor = median(dd[[x_simple]], na.rm = TRUE)
+new_flight_simple <- data.frame(
+  value = median(dd[[x_simple]], na.rm = TRUE)
 )
 
-names(nuevo_vuelo_simple) <- x_simple
+names(new_flight_simple) <- x_simple
 
-cat("\nPredicción puntual para nuevo vuelo:\n")
-print(predict(modelo_simple, newdata = nuevo_vuelo_simple))
+cat("\nPoint prediction for new flight:\n")
+print(predict(simple_model, newdata = new_flight_simple))
 
-cat("\nIntervalo de confianza para nuevo vuelo:\n")
+cat("\nConfidence interval for new flight:\n")
 print(predict(
-  modelo_simple,
-  newdata = nuevo_vuelo_simple,
+  simple_model,
+  newdata = new_flight_simple,
   interval = "confidence"
 ))
 
-cat("\nIntervalo de predicción para nuevo vuelo:\n")
+cat("\nPrediction interval for new flight:\n")
 print(predict(
-  modelo_simple,
-  newdata = nuevo_vuelo_simple,
+  simple_model,
+  newdata = new_flight_simple,
   interval = "prediction"
 ))
 
 # ==============================================================================
-# 7. REGRESION LINEAL MULTIPLE
+# 7. MULTIPLE LINEAR REGRESSION
 # ==============================================================================
 
-preferidas <- c(
+preferred_vars <- c(
   "elapsedDays",
   "economy",
   "nonStop",
@@ -222,72 +245,72 @@ preferidas <- c(
   "segmentDistance_raw"
 )
 
-vars_modelo_multiple <- preferidas[preferidas %in% names(dd)]
+vars_multiple_model <- preferred_vars[preferred_vars %in% names(dd)]
 
-if (length(vars_modelo_multiple) < 3) {
-  otras_vars <- setdiff(names(dd), c("totalPrice", vars_modelo_multiple))
-  vars_modelo_multiple <- unique(c(vars_modelo_multiple, head(otras_vars, 5)))
+if (length(vars_multiple_model) < 3) {
+  other_vars <- setdiff(names(dd), c("totalPrice", vars_multiple_model))
+  vars_multiple_model <- unique(c(vars_multiple_model, head(other_vars, 5)))
 }
 
-cat("\nVariables usadas en el modelo múltiple:\n")
-print(vars_modelo_multiple)
+cat("\nVariables used in the multiple model:\n")
+print(vars_multiple_model)
 
 formula_multiple <- as.formula(
-  paste("totalPrice ~", paste(vars_modelo_multiple, collapse = " + "))
+  paste("totalPrice ~", paste(vars_multiple_model, collapse = " + "))
 )
 
-modelo_multiple <- lm(formula_multiple, data = dd)
+multiple_model <- lm(formula_multiple, data = dd)
 
-cat("\nResumen del modelo lineal múltiple:\n")
-print(summary(modelo_multiple))
+cat("\nMultiple linear model summary:\n")
+print(summary(multiple_model))
 
-cat("\nR2 modelo simple:\n")
-print(summary(modelo_simple)$r.squared)
+cat("\nR2 simple model:\n")
+print(summary(simple_model)$r.squared)
 
-cat("\nR2 modelo múltiple:\n")
-print(summary(modelo_multiple)$r.squared)
+cat("\nR2 multiple model:\n")
+print(summary(multiple_model)$r.squared)
 
-cat("\nR2 ajustado modelo múltiple:\n")
-print(summary(modelo_multiple)$adj.r.squared)
+cat("\nAdjusted R2 multiple model:\n")
+print(summary(multiple_model)$adj.r.squared)
 
 # ==============================================================================
-# 8. VARIABLES CATEGORICAS
+# 8. CATEGORICAL VARIABLES
 # ==============================================================================
 
-if (length(varCat) > 0) {
+if (length(cat_vars) > 0) {
   
-  cat_var <- varCat[1]
+  cat_var <- cat_vars[1]
   
   formula_factor <- as.formula(
     paste("totalPrice ~", x_simple, "+", cat_var)
   )
   
-  modelo_factor <- lm(formula_factor, data = dd)
+  factor_model <- lm(formula_factor, data = dd)
   
-  cat("\nVariable categórica usada:\n")
+  cat("\nCategorical variable used:\n")
   print(cat_var)
   
-  cat("\nResumen del modelo con variable categórica:\n")
-  print(summary(modelo_factor))
+  cat("\nModel summary with categorical variable:\n")
+  print(summary(factor_model))
   
 } else {
-  cat("\nNo hay variables categóricas disponibles.\n")
+  cat("\nNo categorical variables available.\n")
 }
 
 # ==============================================================================
-# 9. INTERACCIONES
+# 9. INTERACTIONS
 # ==============================================================================
 
-if (length(varCat) > 0) {
+if (length(cat_vars) > 0) {
   
-  formula_interaccion <- as.formula(
+  formula_interaction <- as.formula(
     paste("totalPrice ~", x_simple, "*", cat_var)
   )
   
-  modelo_interaccion <- lm(formula_interaccion, data = dd)
+  interaction_model <- lm(formula_interaction, data = dd)
   
-  cat("\nResumen del modelo con interacción:\n")
-  print(summary(modelo_interaccion))
+  cat("\nModel summary with interaction:\n")
+  print(summary(interaction_model))
   
   top_cats <- names(sort(table(dd[[cat_var]]), decreasing = TRUE))[
     1:min(4, length(unique(dd[[cat_var]])))
@@ -303,65 +326,74 @@ if (length(varCat) > 0) {
     geom_point(alpha = 0.4) +
     geom_smooth(method = "lm", se = FALSE) +
     labs(
-      title = paste("Interacción entre", x_simple, "y", cat_var),
+      title = paste("Interaction between", x_simple, "and", cat_var),
       x = x_simple,
-      y = "Precio total",
+      y = "Total price",
       color = cat_var
     ) +
     theme_minimal()
 }
 
 # ==============================================================================
-# 10. MULTICOLINEALIDAD
+# 10. MULTICOLLINEARITY
 # ==============================================================================
 
-cat("\nVIF del modelo múltiple:\n")
-print(try(car::vif(modelo_multiple)))
+cat("\nVIF of the multiple model:\n")
+print(try(car::vif(multiple_model)))
 
 # ==============================================================================
-# 11. MODELO COMPLETO
+# 11. FULL MODEL
 # ==============================================================================
 
-modelo_completo <- lm(totalPrice ~ ., data = dd)
+full_model <- lm(totalPrice ~ ., data = dd)
 
-cat("\nResumen del modelo completo:\n")
-print(summary(modelo_completo))
-
-# ==============================================================================
-# 12. SELECCION DE VARIABLES POR AIC
-# ==============================================================================
-
-modelo_step <- step(modelo_completo, trace = 1)
-
-cat("\nResumen del modelo seleccionado por AIC:\n")
-print(summary(modelo_step))
+cat("\nFull model summary:\n")
+print(summary(full_model))
 
 # ==============================================================================
-# 13. COMPARACION FORMAL ENTRE MODELOS
+# 12. VARIABLE SELECTION BY AIC
 # ==============================================================================
 
-cat("\nANOVA entre modelo simple y múltiple:\n")
-print(anova(modelo_simple, modelo_multiple))
+step_model <- step(full_model, trace = 1)
+
+cat("\nAIC-selected model summary:\n")
+print(summary(step_model))
 
 # ==============================================================================
-# 14. EVALUACION PREDICTIVA TRAIN / TEST
+# 13. FORMAL MODEL COMPARISON
 # ==============================================================================
 
-set.seed(2108)
+cat("\nANOVA between simple and multiple model:\n")
+print(anova(simple_model, multiple_model))
 
-trainIndex <- caret::createDataPartition(
-  dd$totalPrice,
-  p = 0.8,
-  list = FALSE,
-  times = 1
-)
+# ==============================================================================
+# 14. PREDICTIVE EVALUATION TRAIN / TEST
+# ==============================================================================
 
-train <- dd[trainIndex, ]
-test  <- dd[-trainIndex, ]
+train <- train_df
+test  <- test_df
 
-modelo_train <- lm(formula(modelo_step), data = train)
+train <- train |>
+  mutate(
+    across(where(is.character), as.factor),
+    across(where(is.logical), as.factor)
+  )
 
-pred_test <- predict(modelo_train, newdata = test)
+test <- test |>
+  mutate(
+    across(where(is.character), as.factor),
+    across(where(is.logical), as.factor)
+  )
+
+train$totalPrice <- as.numeric(train$totalPrice)
+test$totalPrice  <- as.numeric(test$totalPrice)
+
+train <- train |> select(-any_of(c("taxAmount", "log_price")))
+test  <- test  |> select(-any_of(c("taxAmount", "log_price")))
+
+train_model <- lm(formula(step_model), data = train)
+
+pred_test <- predict(train_model, newdata = test)
 
 rmse <- sqrt(mean((test$totalPrice - pred_test)^2))
 mae  <- mean(abs(test$totalPrice - pred_test))
@@ -370,23 +402,23 @@ mse  <- mean((test$totalPrice - pred_test)^2)
 r2_test <- 1 - sum((test$totalPrice - pred_test)^2) /
   sum((test$totalPrice - mean(test$totalPrice))^2)
 
-metricas_test <- data.frame(
+test_metrics <- data.frame(
   MAE = mae,
   MSE = mse,
   RMSE = rmse,
   R2_test = r2_test
 )
 
-cat("\nMétricas en test:\n")
-print(metricas_test)
+cat("\nTest metrics:\n")
+print(test_metrics)
 
-resultados_test <- data.frame(
-  Real = test$totalPrice,
-  Predicho = pred_test,
+test_results <- data.frame(
+  Actual = test$totalPrice,
+  Predicted = pred_test,
   Error = test$totalPrice - pred_test
 )
 
-ggplot(resultados_test, aes(x = Real, y = Predicho)) +
+ggplot(test_results, aes(x = Actual, y = Predicted)) +
   geom_point(alpha = 0.5, color = "blue") +
   geom_abline(
     slope = 1,
@@ -396,14 +428,14 @@ ggplot(resultados_test, aes(x = Real, y = Predicho)) +
     linewidth = 1
   ) +
   labs(
-    title = "Valores reales frente a valores predichos",
-    subtitle = "La línea roja representa la predicción perfecta",
-    x = "Precio real",
-    y = "Precio predicho"
+    title = "Actual versus predicted values",
+    subtitle = "The red line represents perfect prediction",
+    x = "Actual price",
+    y = "Predicted price"
   ) +
   theme_minimal()
 
-ggplot(resultados_test, aes(x = Predicho, y = Error)) +
+ggplot(test_results, aes(x = Predicted, y = Error)) +
   geom_point(alpha = 0.5, color = "purple") +
   geom_hline(
     yintercept = 0,
@@ -412,66 +444,66 @@ ggplot(resultados_test, aes(x = Predicho, y = Error)) +
     linewidth = 1
   ) +
   labs(
-    title = "Residuos en el conjunto de test",
-    x = "Precio predicho",
+    title = "Residuals on the test set",
+    x = "Predicted price",
     y = "Error"
   ) +
   theme_minimal()
 
 # ==============================================================================
-# 15. VALIDACION CRUZADA
+# 15. CROSS-VALIDATION
 # ==============================================================================
 
 set.seed(2108)
 
 control <- trainControl(method = "cv", number = 5)
 
-modelo_cv <- train(
-  formula(modelo_step),
-  data = dd,
+cv_model <- train(
+  formula(step_model),
+  data = train,
   method = "lm",
   trControl = control
 )
 
-cat("\nValidación cruzada:\n")
-print(modelo_cv)
+cat("\nCross-validation:\n")
+print(cv_model)
 
 # ==============================================================================
-# 16. MODELO LOG-LINEAL
+# 16. LOG-LINEAR MODEL
 # ==============================================================================
 
-modelo_log <- lm(
-  update(formula(modelo_step), log(totalPrice) ~ .),
+log_model <- lm(
+  update(formula(step_model), log(totalPrice) ~ .),
   data = dd
 )
 
-cat("\nResumen del modelo log-lineal:\n")
-print(summary(modelo_log))
+cat("\nLog-linear model summary:\n")
+print(summary(log_model))
 
-autoplot(modelo_simple) +
+autoplot(simple_model) +
   theme_minimal()
 
 # ==============================================================================
-# 17. MODELO CUADRATICO
+# 17. QUADRATIC MODEL
 # ==============================================================================
 
-formula_cuadratica <- as.formula(
+formula_quadratic <- as.formula(
   paste("totalPrice ~", x_simple, "+ I(", x_simple, "^2)")
 )
 
-modelo_cuadratico <- lm(formula_cuadratica, data = dd)
+quadratic_model <- lm(formula_quadratic, data = dd)
 
-cat("\nResumen del modelo cuadrático:\n")
-print(summary(modelo_cuadratico))
+cat("\nQuadratic model summary:\n")
+print(summary(quadratic_model))
 
-cat("\nANOVA entre modelo simple y cuadrático:\n")
-print(anova(modelo_simple, modelo_cuadratico))
+cat("\nANOVA between simple and quadratic model:\n")
+print(anova(simple_model, quadratic_model))
 
 # ==============================================================================
-# 18. OUTLIERS, LEVERAGE E INFLUENCIA
+# 18. OUTLIERS, LEVERAGE AND INFLUENCE
 # ==============================================================================
 
-cooks <- cooks.distance(modelo_multiple)
+cooks <- cooks.distance(multiple_model)
 
 df_cooks <- data.frame(
   index = 1:length(cooks),
@@ -480,7 +512,7 @@ df_cooks <- data.frame(
 
 threshold <- 4 / nrow(dd)
 
-cat("\nTop 20 observaciones más influyentes según Cook:\n")
+cat("\nTop 20 most influential observations according to Cook's Distance:\n")
 print(head(df_cooks[order(-df_cooks$cooks), ], 20))
 
 ggplot(df_cooks, aes(x = index, y = cooks)) +
@@ -491,9 +523,9 @@ ggplot(df_cooks, aes(x = index, y = cooks)) +
     linetype = "dashed"
   ) +
   labs(
-    title = "Distancia de Cook",
-    subtitle = "La línea roja representa el umbral 4/n",
-    x = "Observación",
+    title = "Cook's Distance",
+    subtitle = "The red line represents the 4/n threshold",
+    x = "Observation",
     y = "Cook's Distance"
   ) +
   theme_minimal()
@@ -512,9 +544,9 @@ ggplot(df_cooks, aes(x = index, y = cooks)) +
     linetype = "dashed"
   ) +
   labs(
-    title = "Detección de observaciones influyentes",
-    subtitle = "Los puntos rojos superan el umbral 4/n",
-    x = "Observación",
+    title = "Detection of influential observations",
+    subtitle = "Red points exceed the 4/n threshold",
+    x = "Observation",
     y = "Cook's Distance"
   ) +
   theme_minimal()
@@ -531,80 +563,80 @@ ggplot(top_cooks, aes(x = reorder(index, -cooks), y = cooks)) +
     linetype = "dashed"
   ) +
   labs(
-    title = "Top observaciones más influyentes",
-    x = "Observación",
+    title = "Top most influential observations",
+    x = "Observation",
     y = "Cook's Distance"
   ) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 # ==============================================================================
-# 19. COMPARACION GLOBAL DE MODELOS
+# 19. GLOBAL MODEL COMPARISON
 # ==============================================================================
 
-resumen_modelos <- data.frame(
-  Modelo = c(
+model_summary <- data.frame(
+  Model = c(
     "Simple",
     "Multiple",
-    "Completo",
+    "Full",
     "Stepwise",
-    "Log-lineal",
-    "Cuadratico"
+    "Log-linear",
+    "Quadratic"
   ),
   R2 = c(
-    summary(modelo_simple)$r.squared,
-    summary(modelo_multiple)$r.squared,
-    summary(modelo_completo)$r.squared,
-    summary(modelo_step)$r.squared,
-    summary(modelo_log)$r.squared,
-    summary(modelo_cuadratico)$r.squared
+    summary(simple_model)$r.squared,
+    summary(multiple_model)$r.squared,
+    summary(full_model)$r.squared,
+    summary(step_model)$r.squared,
+    summary(log_model)$r.squared,
+    summary(quadratic_model)$r.squared
   ),
-  R2_ajustado = c(
-    summary(modelo_simple)$adj.r.squared,
-    summary(modelo_multiple)$adj.r.squared,
-    summary(modelo_completo)$adj.r.squared,
-    summary(modelo_step)$adj.r.squared,
-    summary(modelo_log)$adj.r.squared,
-    summary(modelo_cuadratico)$adj.r.squared
+  Adjusted_R2 = c(
+    summary(simple_model)$adj.r.squared,
+    summary(multiple_model)$adj.r.squared,
+    summary(full_model)$adj.r.squared,
+    summary(step_model)$adj.r.squared,
+    summary(log_model)$adj.r.squared,
+    summary(quadratic_model)$adj.r.squared
   ),
   AIC = c(
-    AIC(modelo_simple),
-    AIC(modelo_multiple),
-    AIC(modelo_completo),
-    AIC(modelo_step),
-    AIC(modelo_log),
-    AIC(modelo_cuadratico)
+    AIC(simple_model),
+    AIC(multiple_model),
+    AIC(full_model),
+    AIC(step_model),
+    AIC(log_model),
+    AIC(quadratic_model)
   )
 )
 
-cat("\nResumen comparativo de modelos:\n")
-print(resumen_modelos)
+cat("\nComparative model summary:\n")
+print(model_summary)
 
 # ==============================================================================
-# 20. RESUMEN FINAL
+# 20. FINAL SUMMARY
 # ==============================================================================
 
 cat("\n============================================================\n")
-cat("RESUMEN FINAL\n")
+cat("FINAL SUMMARY\n")
 cat("============================================================\n")
 
-cat("\nVariable respuesta: totalPrice\n")
+cat("\nResponse variable: totalPrice\n")
 
-cat("\nModelo simple usado:\n")
+cat("\nSimple model used:\n")
 print(formula_simple)
 
-cat("\nModelo múltiple usado:\n")
+cat("\nMultiple model used:\n")
 print(formula_multiple)
 
-cat("\nModelo stepwise final:\n")
-print(formula(modelo_step))
+cat("\nFinal stepwise model:\n")
+print(formula(step_model))
 
-cat("\nMétricas test modelo stepwise:\n")
-print(metricas_test)
+cat("\nTest metrics for stepwise model:\n")
+print(test_metrics)
 
-cat("\nComparación global de modelos:\n")
-print(resumen_modelos)
+cat("\nGlobal model comparison:\n")
+print(model_summary)
 
 cat("\n============================================================\n")
-cat("FIN DEL SCRIPT\n")
+cat("END OF SCRIPT\n")
 cat("============================================================\n")

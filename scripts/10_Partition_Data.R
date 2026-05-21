@@ -12,6 +12,7 @@ invisible(lapply(list.of.packages, require, character.only = TRUE))
 
 # 1. Carga del dataset preprocesado
 dd <- readRDS("data/interim/flightprices_preprocessed.rds")
+cat("Rows in flightprices_preprocessed:", nrow(dd), "\n")
 
 # 2. Definición de Targets y Variables de Precio
 val_economy <- as.character(dd$economy)
@@ -23,6 +24,16 @@ dd$economy_f <- factor(
 )
 dd$log_price <- log(dd$totalPrice)
 
+# CAMBIO MÍNIMO:
+# Agrupamos niveles raros de equipment para evitar que aparezcan categorías nuevas en test
+# que no existan en train al usar modelos lineales con factores.
+if ("equipment" %in% names(dd)) {
+  dd$equipment <- as.character(dd$equipment)
+  rare_equipment <- names(table(dd$equipment))[table(dd$equipment) < 5]
+  dd$equipment[dd$equipment %in% rare_equipment] <- "Other"
+  dd$equipment <- as.factor(dd$equipment)
+}
+
 # Aislamos los predictores base (sin precios para evitar data leakage cruzado)
 pred_base <- c("travelDistance", "layoverNumber", "airline", "nonStop", "elapsedDays", "seatsLeft")
 
@@ -32,6 +43,11 @@ train_idx <- createDataPartition(dd$economy_f, p = 0.8, list = FALSE)
 
 train_df <- dd[train_idx, ]
 test_df  <- dd[-train_idx, ]
+
+# Comprobación de tamaños
+cat("Rows in train_df:", nrow(train_df), "\n")
+cat("Rows in test_df:", nrow(test_df), "\n")
+cat("Total rows:", nrow(train_df) + nrow(test_df), "\n")
 
 # 4. Preparación específica para XGBoost (Matrices numéricas One-Hot)
 # Inyectamos AMBOS precios en la matriz; luego el modelo elegirá cuál usar
