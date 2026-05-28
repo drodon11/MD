@@ -12,6 +12,9 @@ input_path <- file.path(getwd(), "data", "interim", "flightprices_interim.rds")
 if(!file.exists(input_path)) stop("Ejecuta primero 01_clean_interim.R")
 dd <- readRDS(input_path)
 
+# CAMBIO MINIMO: guardamos el número original de filas
+n_original <- nrow(dd)
+
 # Convertir variables cualitativas a factor
 cat("\n--- 0. CONVERSIÓN DE FACTORES ---\n")
 cols_factor <- c("startApt", "destApt", "airline", "equipment", "economy", "nonStop")
@@ -77,7 +80,8 @@ stripplot(imputed_Data, travelDistance, pch = 19, xlab = "Imputation number")
 stripplot(imputed_Data, equipment, pch = 19, xlab = "Imputation number")
 stripplot(imputed_Data, segmentDistance, pch = 19, xlab = "Imputation number")
 
-dd <- mice::complete(imputed_Data, action = "long")
+# CAMBIO MINIMO: antes estaba action = "long", que multiplicaba las filas por 5
+dd <- mice::complete(imputed_Data, action = 1)
 
 # -------------------------------------------------------------------------
 # 4. DETECCIÓN Y TRATAMIENTO DE OUTLIERS
@@ -269,8 +273,14 @@ imputed_Data <- mice(dd_limpio, m = 5, maxit = 50, method = "pmm", ridge = 1e-3,
 dd <- mice::complete(imputed_Data, 2)
 
 # Eliminamos las variables que no son necesarias 
-dd[, c(".imp", ".id")] <- NULL
+# CAMBIO MINIMO: ahora no falla si .imp o .id no existen
+dd <- dd %>% select(-any_of(c(".imp", ".id")))
 
 out_path_clean <- file.path(getwd(), "data", "interim", "flightprices_preprocessed.rds")
-saveRDS(dd, out_path_clean)
 
+# CAMBIO MINIMO: comprobación antes de guardar
+if (nrow(dd) != n_original) {
+  stop("ERROR: El número de filas del dataset ha cambiado durante el preprocesamiento.")
+}
+
+saveRDS(dd, out_path_clean)
