@@ -57,7 +57,7 @@ print(MC_kernel)
 cat(sprintf("Accuracy Kernel: %.4f\n", sum(diag(MC_kernel))/sum(MC_kernel)))
 
 cat("\n======================================================\n")
-cat("          2. kNN CLASIFICACIÓN (Paquete VIM)\n")
+cat("          2. kNN CLASIFICACIÓN (Paquete VIM)\n") 
 cat("======================================================\n")
 # Unimos los datos temporalmente
 df_aux <- rbind(train_df[, c("airline", vars_num)], 
