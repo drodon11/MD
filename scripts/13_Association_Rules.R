@@ -231,6 +231,7 @@ reglas <- apriori(
 cat("\nResumen de reglas generadas en Train:\n")
 print(reglas)
 print(summary(reglas))
+
 # ---------- 7. INSPECCIÓN Y ORDENACIÓN ----------
 cat("\n--- 7. INSPECCIÓN DE REGLAS ---\n")
 
@@ -327,7 +328,7 @@ reglas_economy_no <- reglas_economy_no[!is.redundant(reglas_economy_no)]
 reglas_economy_no <- sort(reglas_economy_no, by = "lift", decreasing = TRUE)
 inspect(head(reglas_economy_no, 10))
 
-#  Reglas interesantes
+# Reglas interesantes
 cat("\nReglas de alta calidad (lift > 2.0 & support > 0.05 & confidence > 0.7):\n")
 reglas_interesantes <- subset(
   reglas,
@@ -387,6 +388,10 @@ reglas_train <- apriori(
   parameter = list(supp = 0.01, conf = 0.5, minlen = 2),
   control   = list(verbose = FALSE)
 )
+
+# === ESTA ES LA ÚNICA MODIFICACIÓN: Poda de redundancias añadida en el Train antes de validar ===
+reglas_train <- reglas_train[!is.redundant(reglas_train)]
+
 reglas_train <- sort(reglas_train, by = "lift", decreasing = TRUE)
 reglas_train_top <- head(reglas_train, 20)
 
@@ -450,7 +455,7 @@ for (aero in aerolineas) {
 
 # ---------- 15. GUARDADO DE RESULTADOS ----------
 cat("\n--- 15. GUARDADO DE RESULTADOS ---\n")
-out_dir <- file.path(getwd(), "data", "interim")
+out_dir <- file.path(getwd(), "data", "results")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 # Guardar reglas del conjunto Train sin redundancia
@@ -467,3 +472,6 @@ write.csv(
 # Guardar las transacciones de entrenamiento
 saveRDS(trans_train, file.path(out_dir, "transactions.rds"))
 
+cat("\nArchivos guardados en:", normalizePath(out_dir, winslash = "/"), "\n")
+cat("  - association_rules.csv\n")
+cat("  - transactions.rds\n")
