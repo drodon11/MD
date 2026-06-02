@@ -29,7 +29,7 @@ cat("\nDimensiones del conjunto de prueba:", dim(test_df), "\n")
 discretize_dataset <- function(data) {
   df_disc <- data
   
-  # 1. totalPrice
+  # 1. totalPrice 
   if ("totalPrice" %in% names(df_disc)) {
     df_disc$precio_grupo <- cut(
       df_disc$totalPrice,
@@ -82,13 +82,20 @@ discretize_dataset <- function(data) {
     )
   }
   
-  # 7. Variables booleanas
-  if ("economy" %in% names(df_disc)) {
+  # 7. economy
+  if ("economy_f" %in% names(df_disc)) {
     df_disc$economy_lbl <- factor(
-      ifelse(as.logical(df_disc$economy), "economy_si", "economy_no")
+      paste0("clase_", as.character(df_disc$economy_f)),
+      levels = c("clase_Premium", "clase_Economy")
+    )
+  } else if ("economy" %in% names(df_disc)) {
+    df_disc$economy_lbl <- factor(
+      ifelse(as.logical(df_disc$economy), "clase_Economy", "clase_Premium"),
+      levels = c("clase_Premium", "clase_Economy")
     )
   }
   
+  # 8. Tipo de vuelo
   if ("nonStop" %in% names(df_disc)) {
     df_disc$vuelo_tipo <- factor(
       ifelse(as.logical(df_disc$nonStop), "vuelo_directo", "vuelo_con_escala")
@@ -161,8 +168,8 @@ itemFrequencyPlot(
   trans_train,
   topN  = 20,
   type  = "relative",
-  main  = "Top 20 items más frecuentes (Train)",
-  ylab  = "Soporte relativo",
+  main  = "Top 20 most frequent items (Train)",
+  ylab  = "Relative support",
   col   = "steelblue"
 )
 
@@ -210,9 +217,6 @@ ggplot(conteo_reglas, aes(x = soporte, y = n_reglas, color = factor(confianza)))
     color  = "Confianza mínima"
   ) +
   theme_minimal()
-#---------------------
-#confianza: 0.6 y soporte 2%
-#---------------------
 
 
 # ---------- 6. EXTRACCIÓN DE REGLAS CON APRIORI ----------
@@ -266,7 +270,7 @@ plot(
   method  = "scatterplot",
   measure = c("support", "confidence"),
   shading = "lift",
-  main    = "Reglas de asociación (Train) – Soporte vs Confianza"
+  main    = "Support vs Confidence"
 )
 
 # Two-key plot
@@ -280,7 +284,7 @@ plot(reglas_top20, method = "graph", engine = "htmlwidget")
 # ---------- 9. FILTRADO DE REGLAS ----------
 cat("\n--- 9. FILTRADO DE REGLAS ---\n")
 
-# 9a. Reglas con precio_alto como consecuente
+# 9a. Reglas con precio_alto como consecuente (TargetTotalPrice)
 cat("\nReglas con consecuente 'precio_alto':\n")
 reglas_precio_alto <- apriori(
   trans_train,
@@ -292,7 +296,7 @@ reglas_precio_alto <- reglas_precio_alto[!is.redundant(reglas_precio_alto)]
 reglas_precio_alto <- sort(reglas_precio_alto, by = "lift", decreasing = TRUE)
 inspect(head(reglas_precio_alto, 15))
 
-# 9b. Reglas con precio_bajo como consecuente
+# 9b. Reglas con precio_bajo como consecuente (TargetTotalPrice)
 cat("\nReglas con consecuente 'precio_bajo':\n")
 reglas_precio_bajo <- apriori(
   trans_train,
@@ -304,24 +308,24 @@ reglas_precio_bajo <- reglas_precio_bajo[!is.redundant(reglas_precio_bajo)]
 reglas_precio_bajo <- sort(reglas_precio_bajo, by = "lift", decreasing = TRUE)
 inspect(head(reglas_precio_bajo, 15))
 
-# 9c. Reglas con economy_si como consecuente
-cat("\nReglas con consecuente 'economy_si':\n")
+# 9c. Reglas con clase_Economy como consecuente (TargetEconomy)
+cat("\nReglas con consecuente 'clase_Economy':\n")
 reglas_economy_si <- apriori(
   trans_train,
   parameter  = list(supp = 0.01, conf = 0.5, minlen = 2),
-  appearance = list(rhs = "economy_lbl=economy_si", default = "lhs"),
+  appearance = list(rhs = "economy_lbl=clase_Economy", default = "lhs"),
   control    = list(verbose = FALSE)
 )
 reglas_economy_si <- reglas_economy_si[!is.redundant(reglas_economy_si)]
 reglas_economy_si <- sort(reglas_economy_si, by = "lift", decreasing = TRUE)
 inspect(head(reglas_economy_si, 10))
 
-# 9d. Reglas con economy_no como consecuente (Premium)
-cat("\nReglas con consecuente 'economy_no':\n")
+# 9d. Reglas con clase_Premium como consecuente (TargetEconomy)
+cat("\nReglas con consecuente 'clase_Premium' (Premium):\n")
 reglas_economy_no <- apriori(
   trans_train,
   parameter  = list(supp = 0.01, conf = 0.5, minlen = 2),
-  appearance = list(rhs = "economy_lbl=economy_no", default = "lhs"),
+  appearance = list(rhs = "economy_lbl=clase_Premium", default = "lhs"),
   control    = list(verbose = FALSE)
 )
 reglas_economy_no <- reglas_economy_no[!is.redundant(reglas_economy_no)]
@@ -381,7 +385,6 @@ print(as(items(top5_eclat), "matrix"))
 
 # ---------- 13. VALIDACIÓN TRAIN / TEST ----------
 cat("\n--- 13. VALIDACIÓN TRAIN / TEST ---\n")
-# Usamos directamente 'trans_train' y 'trans_test' generados desde model_data.RData
 
 reglas_train <- apriori(
   trans_train,
@@ -389,7 +392,7 @@ reglas_train <- apriori(
   control   = list(verbose = FALSE)
 )
 
-# === ESTA ES LA ÚNICA MODIFICACIÓN: Poda de redundancias añadida en el Train antes de validar ===
+# Poda de redundancias añadida en el Train antes de validar
 reglas_train <- reglas_train[!is.redundant(reglas_train)]
 
 reglas_train <- sort(reglas_train, by = "lift", decreasing = TRUE)
@@ -430,29 +433,6 @@ reglas_ph_final <- sort(reglas_ph_final, by = "lift", decreasing = TRUE)
 cat("\nTop 15 reglas hacia precio_alto (sin redundantes) en Train:\n")
 inspect(head(reglas_ph_final, 15))
 
-# ---------- 14b. ANÁLISIS DIRIGIDO: PERFIL DE AEROLÍNEAS ----------
-cat("\n--- 14b. ANÁLISIS DIRIGIDO: ¿QUÉ DEFINE A CADA AEROLÍNEA? ---\n")
-
-# Analizamos las aerolíneas dominantes que aparecieron en tu exploración inicial
-aerolineas <- c("airline=Delta", "airline=American Airlines", "airline=United", "airline=Spirit Airlines")
-
-for (aero in aerolineas) {
-  cat("\nReglas que predicen:", aero, "\n")
-  
-  reglas_aero <- apriori(
-    trans_train,
-    parameter  = list(supp = 0.01, conf = 0.4, minlen = 2),
-    appearance = list(rhs = aero, default = "lhs"),
-    control    = list(verbose = FALSE)
-  )
-  
-  reglas_aero <- reglas_aero[!is.redundant(reglas_aero)]
-  reglas_aero <- sort(reglas_aero, by = "lift", decreasing = TRUE)
-  
-  # Mostramos las 5 mejores por aerolínea
-  inspect(head(reglas_aero, 5))
-}
-
 # ---------- 15. GUARDADO DE RESULTADOS ----------
 cat("\n--- 15. GUARDADO DE RESULTADOS ---\n")
 out_dir <- file.path(getwd(), "data", "results")
@@ -475,3 +455,4 @@ saveRDS(trans_train, file.path(out_dir, "transactions.rds"))
 cat("\nArchivos guardados en:", normalizePath(out_dir, winslash = "/"), "\n")
 cat("  - association_rules.csv\n")
 cat("  - transactions.rds\n")
+
