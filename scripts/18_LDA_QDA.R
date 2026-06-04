@@ -1,352 +1,192 @@
-# install.packages("MASS")
-library(MASS)
-library(FactoMineR)
-
-input_path <- file.path(getwd(), "data", "interim", "flightprices_preprocessed.rds")
-vuelos <- readRDS(input_path)
-
-names(vuelos)
-
-vuelos <- vuelos[, c("airline", "elapsedDays", "taxAmount", "totalPrice", 
-                     "seatsLeft", "travelDistance", "segmentDistance", "layoverNumber")]
-
-vuelos <- na.omit(vuelos)
-# Asegurarnos de que la clase a predecir sea un factor
-vuelos$airline <- as.factor(vuelos$airline)
-
-# Hay categorias de aerolineas con muy pocos vuelos, hay que agrupar ("otras")
-print("Frecuencias antes de agrupar:")
-print(table(vuelos$airline))
-
-# Identificamos las aerolíneas que tienen más de 50 vuelos
-conteos <- table(vuelos$airline)
-aerolineas_grandes <- names(conteos[conteos > 50])
-
-# Convertimos a texto temporalmente para modificar
-vuelos$airline <- as.character(vuelos$airline)
-
-# Si la aerolínea no está en las grandes, la llamamos "Otras"
-vuelos$airline[!(vuelos$airline %in% aerolineas_grandes)] <- "Otras"
-
-# Volvemos a convertir a factor (obligatorio para los modelos)
-vuelos$airline <- as.factor(vuelos$airline)
-
-print("Frecuencias DESPUÉS de agrupar:")
-print(table(vuelos$airline))
-
-
 # ==============================================================================
-#                                      LDA
+#                      LINEAR & QUADRATIC DISCRIMINANT ANALYSIS
 # ==============================================================================
-vuelos.lda <- lda(airline ~ elapsedDays + taxAmount + totalPrice + seatsLeft + 
-                    travelDistance + segmentDistance + layoverNumber, data = vuelos)
 
-vuelos.lda
+# --- 0. SETUP Y CARGA DE DATOS ---
+rm(list = ls())
 
-# coeficients de la funcio discriminant
-vuelos.lda$scaling[,2]
-vuelos.lda$scaling[,1]
-
-vuelos.lda$scaling[,1:2]
-
-# valors de cada cas per la primera funcio discriminant
-vuelos.lda.values <- predict(vuelos.lda, vuelos[2:8])
-
-vuelos$LDA2 <- vuelos.lda.values$x[,2]
-vuelos.lda.values$x[,2]
-vuelos$LDA1 <- vuelos.lda.values$x[,1]
-vuelos.lda.values$x[,1]
-
-calcWithinGroupsVariance <- function(variable,groupvariable)
-{
-  groupvariable2 <- as.factor(groupvariable[[1]])
-  levels <- levels(groupvariable2)
-  numlevels <- length(levels)
-  numtotal <- 0
-  denomtotal <- 0
-  for (i in 1:numlevels)
-  {
-    leveli <- levels[i]
-    levelidata <- variable[groupvariable==leveli,]
-    levelilength <- length(levelidata)
-    if (levelilength > 1) { 
-      sdi <- sd(levelidata)
-      numi <- (levelilength - 1)*(sdi * sdi)
-      denomi <- levelilength
-      numtotal <- numtotal + numi
-      denomtotal <- denomtotal + denomi
-    }
-  }
-  Vw <- numtotal / (denomtotal - numlevels)
-  return(Vw)
-}
-
-groupStandardise <- function(variables, groupvariable)
-{
-  variables <- as.data.frame(variables)
-  numvariables <- length(variables)
-  variablenames <- colnames(variables)
-  for (i in 1:numvariables)
-  {
-    variablei <- variables[i]
-    variablei_name <- variablenames[i]
-    variablei_Vw <- calcWithinGroupsVariance(variablei, groupvariable)
-    variablei_mean <- mean(as.matrix(variablei))  
-    variablei_new <- (variablei - variablei_mean)/(sqrt(variablei_Vw))
-    data_length <- nrow(variablei)
-    if (i == 1) { variables_new <- data.frame(row.names=seq(1,data_length)) }
-    variables_new[`variablei_name`] <- variablei_new
-  }
-  return(variables_new)
-}
-
-# si s'estandarditzen les variables es solen obtenir valors mes interpretables
-groupstandardisedconcentrations <- groupStandardise(vuelos[2:8], vuelos[1])
-
-calcBetweenGroupsVariance <- function(variable,groupvariable)
-{
-  groupvariable2 <- as.factor(groupvariable[[1]])
-  levels <- levels(groupvariable2)
-  numlevels <- length(levels)
-  grandmean <- mean(as.matrix(variable) )         
-  numtotal <- 0
-  denomtotal <- 0
-  for (i in 1:numlevels)
-  {
-    leveli <- levels[i]
-    levelidata <- variable[groupvariable==leveli,]
-    levelilength <- length(levelidata)
-    if (levelilength > 0) {
-      meani <- mean( as.matrix(levelidata) )
-      sdi <- sd(levelidata)
-      numi <- levelilength * ((meani - grandmean)^2)
-      denomi <- levelilength
-      numtotal <- numtotal + numi
-      denomtotal <- denomtotal + denomi
-    }
-  }
-  Vb <- numtotal / (numlevels - 1)
-  Vb <- Vb[[1]]
-  return(Vb)
-}
-
-calcSeparations <- function(variables,groupvariable)
-{
-  variables <- as.data.frame(variables)
-  numvariables <- length(variables)
-  variablenames <- colnames(variables)
-  for (i in 1:numvariables)
-  {
-    variablei <- variables[i]
-    variablename <- variablenames[i]
-    Vw <- calcWithinGroupsVariance(variablei, groupvariable)
-    Vb <- calcBetweenGroupsVariance(variablei, groupvariable)
-    sep <- Vb/Vw
-    print(paste("variable",variablename,"Vw=",Vw,"Vb=",Vb,"separation=",sep))
-  }
-}
-
-# separacio que donen les dues funcions discriminants
-calcSeparations(vuelos.lda.values$x, vuelos[1])
-
-
-hist(vuelos.lda.values$x[,2])
-hist(vuelos.lda.values$x[,1])
-
-# histograma multiple entre la funcio discriminant i la resposta
-#par("mar")
-#par(mar=c(1,1,1,1))
-#par(mar=c(5.1,4.1,4.1,2.1))
-#par(mar=c(3,2.5,1.5,1))
-
-pdf("Histogramas_LDA1.pdf", width = 8, height = 15)
-par(mar=c(3, 3, 2, 1))
-ldahist(data = vuelos.lda.values$x[,1], g=vuelos$airline, ymax=1)
-dev.off()
-
-pdf("Histogramas_LDA2.pdf", width = 8, height = 15)
-par(mar=c(3, 3, 2, 1))
-ldahist(data = vuelos.lda.values$x[,2], g=vuelos$airline)
-dev.off()
-
-# plot de les dues components discriminants (etiquetem els grups)
-plot(vuelos.lda.values$x[,1], vuelos.lda.values$x[,2]) 
-
-plot(vuelos$LDA1, vuelos$LDA2)
-text(vuelos.lda.values$x[,1], vuelos.lda.values$x[,2], vuelos$airline, cex=0.7, pos=4, col=as.numeric(vuelos$airline)) 
-
-plot(vuelos$LDA1, vuelos$LDA2, type="n")
-text(vuelos.lda.values$x[,1], vuelos.lda.values$x[,2], vuelos$airline, cex=0.7, pos=4, col="red") 
-
-# utilitzar les regles per estimar el grup de cada cas
-# par(mfrow=c(1,2))
-# ldahist(data = vuelos$LDA2, g=vuelos$airline)
-# ldahist(data = vuelos$LDA1, g=vuelos$airline)
-# par(mfrow=c(1,1))
-
-pdf("Histogramas_Comparativa_LDA1_LDA2.pdf", width = 14, height = 16) 
-
-par(mfrow=c(1,2))
-
-par(mar=c(3, 3, 2, 1))
-
-ldahist(data = vuelos$LDA2, g=vuelos$airline)
-ldahist(data = vuelos$LDA1, g=vuelos$airline)
-
-par(mfrow=c(1,1))
-
-dev.off()
-
-vuelos$Prediccion <- vuelos.lda.values$class
-
-# matriu de confusio
-table(vuelos[,1])
-MC <- table(vuelos[,1], vuelos$Prediccion)
-MC
-
-# accuracy
-accuracy <- sum(diag(MC))/dim(vuelos)[1]
-accuracy
-
-# compute missclassification rate
-MR <- 1-accuracy
-MR
-
-printMeanAndSdByGroup <- function(variables,groupvariable)
-{
-  variablenames <- c(names(groupvariable),names(as.data.frame(variables)))
-  groupvariable <- groupvariable[,1] 
-  means <- aggregate(as.matrix(variables) ~ groupvariable, FUN = mean)
-  names(means) <- variablenames
-  print(paste("Means:"))
-  print(means)
-  sds <- aggregate(as.matrix(variables) ~ groupvariable, FUN = sd)
-  names(sds) <- variablenames
-  print(paste("Standard deviations:"))
-  print(sds)
-  samplesizes <- aggregate(as.matrix(variables) ~ groupvariable, FUN = length)
-  names(samplesizes) <- variablenames
-  print(paste("Sample sizes:"))
-  print(samplesizes)
-}
-
-# mitjanes de les funcions discriminants per grups
-printMeanAndSdByGroup(vuelos.lda.values$x, vuelos[1])
-
-
-# ==============================================================================
-#                      PREPOCESAMIENTO & CARGA DE DATOS
-# ==============================================================================
-list.of.packages <- c("caret", "MASS", "klaR", "ggplot2", "ggpubr", "reshape2") 
-new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
-if(length(new.packages) > 0) {
-  install.packages(new.packages)
-}
+# Instalador automático de paquetes (Blindado y estructurado)
+list.of.packages <- c("MASS", "caret", "ggplot2", "dplyr", "reshape2")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[, "Package"])]
+if (length(new.packages) > 0) install.packages(new.packages, dependencies = TRUE)
 invisible(lapply(list.of.packages, require, character.only = TRUE))
 
+# Aseguramos la instalación de librerías avanzadas para gráficos y supuestos
+if (!requireNamespace("klaR", quietly = TRUE)) install.packages("klaR", dependencies = TRUE)
+if (!requireNamespace("biotools", quietly = TRUE)) install.packages("biotools", dependencies = TRUE)
+
+library(klaR)
+library(biotools)
+
+# Cargamos el entorno de datos oficial del proyecto
 load("data/interim/model_data.RData")
 
-# Asegurarnos de que las clases son factor
-train_df$airline <- as.factor(train_df$airline)
-test_df$airline <- as.factor(test_df$airline)
+# CORREGIDO: El target de clasificación ahora es economy_f (limpiando niveles para caret)
+train_df$economy_f <- as.factor(make.names(train_df$economy_f))
+test_df$economy_f  <- as.factor(make.names(test_df$economy_f))
 
-
-# ESCALADO DE DATOS
-vars_para_escalar <- c("elapsedDays", "taxAmount", "totalPrice", "seatsLeft", 
-                       "travelDistance", "segmentDistance", "layoverNumber")
-
-# Entrenamos el escalador SOLO con el train_df
-preproc_param <- caret::preProcess(x = train_df[, vars_para_escalar], method = c("center", "scale"))
-
-# Transformamos train_df y test_df
-train_df[, vars_para_escalar] <- predict(preproc_param, train_df[, vars_para_escalar])
-test_df[, vars_para_escalar]  <- predict(preproc_param, test_df[, vars_para_escalar])
-
-# Densidades bivariantes (Usando train_df)
-p1 <- ggplot(data = train_df, aes(x = totalPrice, fill = airline, colour = airline)) +
-  geom_density(alpha = 0.3) + theme_bw()
-p2 <- ggplot(data = train_df, aes(x = travelDistance, fill = airline, colour = airline)) +
-  geom_density(alpha = 0.3) + theme_bw()
-p3 <- ggplot(data = train_df, aes(x = taxAmount, fill = airline, colour = airline)) +
-  geom_density(alpha = 0.3) + theme_bw()
-p4 <- ggplot(data = train_df, aes(x = elapsedDays, fill = airline, colour = airline)) +
-  geom_density(alpha = 0.3) + theme_bw()
-
-ggarrange(p1, p2, p3, p4, ncol = 2, nrow = 2, common.legend = TRUE, legend = "bottom")
-
-# Pairs plot (Usando train_df)
-pairs(x = train_df[, c("totalPrice", "travelDistance", "taxAmount", "elapsedDays")], 
-      col = as.numeric(train_df[, 'airline']), pch = 20)
+# Seleccionamos las columnas numéricas cuantitativas (totalPrice incluido como predictor)
+vars_num <- c("elapsedDays", "taxAmount", "totalPrice", 
+              "travelDistance", "segmentDistance", "layoverNumber")
 
 
 # ==============================================================================
-#                                   LDA 2
+#                        1. ANÁLISIS EXPLORATORIO INICIAL
 # ==============================================================================
-options(digits = 4)
+cat("\n--- ANÁLISIS EXPLORATORIO INICIAL ---\n")
 
-# Entrenamos LDA con train_df
-modelo_lda2 <- lda(airline ~ elapsedDays + taxAmount + totalPrice + seatsLeft + 
-                     travelDistance + segmentDistance + layoverNumber, data = train_df)
-modelo_lda2
+# Frecuencias de la variable objetivo en entrenamiento
+print(table(train_df$economy_f))
 
-# Gráfico LDA
-datos_lda <- cbind(train_df, predict(modelo_lda2)$x)
-ggplot(datos_lda, aes(LD1, LD2)) +
-  geom_point(aes(color = airline)) +
-  ggtitle("Gráfico LDA (Train Set)")
+# Medias por grupo de las principales variables químicas/numéricas de los vuelos
+vuelos_medias <- train_df %>%
+  group_by(economy_f) %>%
+  summarise(
+    totalPrice_media = mean(totalPrice),
+    taxAmount_media = mean(taxAmount),
+    elapsedDays_media = mean(elapsedDays),
+    travelDistance_media = mean(travelDistance),
+    .groups = "drop"
+  )
+print(vuelos_medias)
 
-klaR::partimat(airline ~ totalPrice + travelDistance, data = train_df, method = "lda", 
-               image.colors = heat.colors(length(levels(train_df$airline))), col.mean = "black")
+# Boxplot de la variable más crítica (totalPrice) según la clase de asiento
+ggplot(train_df, aes(x = economy_f, y = totalPrice, fill = economy_f)) +
+  geom_boxplot(alpha = 0.75) +
+  labs(title = "Distribución de totalPrice por clase de vuelo", x = "Clase", y = "Precio (€)") +
+  theme_minimal() + 
+  theme(legend.position = "none")
 
-# Predicciones sobre test_df
-predicciones_lda <- predict(modelo_lda2, test_df)
-table(test_df$airline, predicciones_lda$class, dnn = c("Grupo real", "Grupo pronosticado"))
-
-cat(sprintf("Accuracy LDA: %.4f\n", mean(predicciones_lda$class == test_df$airline)))
+# Relación bivariante inicial entre distancia y precio total
+ggplot(train_df, aes(x = travelDistance, y = totalPrice, color = economy_f)) +
+  geom_point(size = 2, alpha = 0.6) +
+  labs(title = "Separación visual de clases usando dos variables", x = "Distancia", y = "Precio Total") +
+  theme_minimal()
 
 
 # ==============================================================================
-#                                    QDA 
+#                        2. LINEAR DISCRIMINANT ANALYSIS (LDA)
 # ==============================================================================
-options(digits = 4)
+cat("\n======================================================\n")
+cat("            LINEAR DISCRIMINANT ANALYSIS (LDA)\n")
+cat("======================================================\n")
 
-# Hay que agrupar las aerolíneas con pocos vuelos para que funcione el QDA
-print("Frecuencias originales en train_df:")
-print(table(train_df$airline))
+# Ajuste del modelo LDA
+modelo_lda <- lda(economy_f ~ ., data = train_df[, c("economy_f", vars_num)])
+print(modelo_lda)
 
-conteos <- table(train_df$airline)
-aerolineas_grandes <- names(conteos[conteos > 50])
+# --- Proyección en el espacio discriminante ---
+# Al tener 2 clases, hay exactamente K-1 = 1 función discriminante (LD1).
+lda_train_pred <- predict(modelo_lda, newdata = train_df[, vars_num])
 
-# Convertimos a texto temporalmente
-train_df$airline <- as.character(train_df$airline)
-test_df$airline <- as.character(test_df$airline)
+# Histograma discriminante (Equivalente al ldahist del documento Wine)
+ldahist(lda_train_pred$x[, 1], g = train_df$economy_f, ymax = 1,
+        main = "Distribución de las clases sobre el eje discriminante LD1")
 
-# Agrupamos en "Otras" las que no son grandes
-train_df$airline[!(train_df$airline %in% aerolineas_grandes)] <- "Otras"
-test_df$airline[!(test_df$airline %in% aerolineas_grandes)] <- "Otras"
 
-# Volvemos a convertir a factor (esencial para LDA/QDA)
-train_df$airline <- as.factor(train_df$airline)
-test_df$airline <- as.factor(test_df$airline)
+# --- Clasificación y Evaluación sobre Test ---
+lda_test_pred <- predict(modelo_lda, newdata = test_df[, vars_num])
 
-print("Frecuencias después de agrupar en train_df:")
-print(table(train_df$airline))
+# Matriz de confusión básica y Accuracy en test
+MC_lda <- table(Real = test_df$economy_f, Predicho = lda_test_pred$class)
+cat("\nMatriz de Confusión LDA (Test):\n")
+print(MC_lda)
 
-# Entrenamos QDA con train_df (excluimos seatsLeft)
-modelo_qda <- qda(airline ~ elapsedDays + taxAmount + totalPrice + 
-                    travelDistance + segmentDistance, data = train_df)
-modelo_qda
+accuracy_lda <- sum(diag(MC_lda)) / sum(MC_lda)
+cat(sprintf("Accuracy LDA en Test: %.4f\n", accuracy_lda))
 
-partimat(airline ~ totalPrice + travelDistance, data = train_df, method = "qda", 
-         image.colors = heat.colors(length(levels(train_df$airline))), col.mean = "black")
+# Evaluación formal con la suite de Caret
+cat("\nMétricas de rendimiento detalladas (LDA):\n")
+print(confusionMatrix(data = lda_test_pred$class, reference = test_df$economy_f))
 
-# Predicciones sobre test_df
-predicciones_qda <- predict(modelo_qda, test_df)
 
-# Matriz de confusión estilo caret
-matriz_confusion_qda <- caret::confusionMatrix(
-  factor(predicciones_qda$class, levels=levels(test_df$airline)), 
-  factor(test_df$airline, levels=levels(test_df$airline))
+# --- Visualización de Fronteras de Decisión LDA ---
+cat("\nGenerando regiones de clasificación bivariantes (LDA)...\n")
+partimat(
+  economy_f ~ totalPrice + travelDistance + taxAmount + elapsedDays,
+  data = train_df[, c("economy_f", vars_num)],
+  method = "lda",
+  prec = 150,
+  image.colors = c("skyblue2", "snow2"),
+  col.mean = "firebrick"
 )
 
-print(matriz_confusion_qda)
+
+# ==============================================================================
+#                        3. COMPROBACIÓN DE SUPUESTOS
+# ==============================================================================
+cat("\n======================================================\n")
+cat("               COMPROBACIÓN DE SUPUESTOS\n")
+cat("======================================================\n")
+
+# Test de Box's M para la igualdad de matrices de covarianza
+# H0: Las matrices de covarianza son iguales (Ideal para LDA)
+# H1: Las matrices de covarianza difieren (Apoya el uso de QDA)
+cat("\nEjecutando Test de Box's M...\n")
+resultado_boxm <- boxM(train_df[, vars_num], train_df$economy_f)
+print(resultado_boxm)
+
+
+# ==============================================================================
+#                        4. QUADRATIC DISCRIMINANT ANALYSIS (QDA)
+# ==============================================================================
+cat("\n======================================================\n")
+cat("           QUADRATIC DISCRIMINANT ANALYSIS (QDA)\n")
+cat("======================================================\n")
+
+# Ajuste del modelo QDA (Relaja el supuesto al permitir covarianzas individuales)
+modelo_qda <- qda(economy_f ~ ., data = train_df[, c("economy_f", vars_num)])
+print(modelo_qda)
+
+
+# --- Predicción y Evaluación sobre Test ---
+qda_test_pred <- predict(modelo_qda, newdata = test_df[, vars_num])
+
+# Matriz de confusión básica y Accuracy en test
+MC_qda <- table(Real = test_df$economy_f, Predicho = qda_test_pred$class)
+cat("\nMatriz de Confusión QDA (Test):\n")
+print(MC_qda)
+
+accuracy_qda <- sum(diag(MC_qda)) / sum(MC_qda)
+cat(sprintf("Accuracy QDA en Test: %.4f\n", accuracy_qda))
+
+# Evaluación formal con Caret
+cat("\nMétricas de rendimiento detalladas (QDA):\n")
+print(confusionMatrix(data = qda_test_pred$class, reference = test_df$economy_f))
+
+
+# --- Visualización de Fronteras de Decisión QDA ---
+cat("\nGenerando regiones de clasificación curvas (QDA)...\n")
+partimat(
+  economy_f ~ totalPrice + travelDistance + taxAmount + elapsedDays,
+  data = train_df[, c("economy_f", vars_num)],
+  method = "qda",
+  prec = 150,
+  image.colors = c("skyblue2", "snow2"),
+  col.mean = "firebrick"
+)
+
+
+# ==============================================================================
+#                        5. COMPARACIÓN FINAL LDA vs QDA
+# ==============================================================================
+cat("\n======================================================\n")
+cat("             COMPARACIÓN DE RENDIMIENTO\n")
+cat("======================================================\n")
+
+# Estructura del dataframe comparativo
+resultados <- data.frame(
+  Modelo = c("LDA", "QDA"),
+  Accuracy = c(accuracy_lda, accuracy_qda),
+  Error = c(1 - accuracy_lda, 1 - accuracy_qda)
+)
+print(resultados)
+
+# Gráfico de barras comparativo con ggplot2
+ggplot(resultados, aes(x = Modelo, y = Accuracy, fill = Modelo)) +
+  geom_col(alpha = 0.85, width = 0.4) +
+  ylim(0, 1) +
+  labs(title = "Comparación de Accuracy en Test (Flight Prices)", x = "Modelo", y = "Accuracy") +
+  scale_fill_manual(values = c("dodgerblue3", "darkorange2")) +
+  theme_minimal() +
+  theme(legend.position = "none")
