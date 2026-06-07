@@ -1,12 +1,6 @@
-# =========================================================================
-# RANDOM FOREST: Clasificación y Regresión — Flight Prices
-# Adaptado con Validación Cruzada, Tuning, y Explicabilidad Completa (SHAP)
-# =========================================================================
-
 # --- 0. SETUP Y CARGA DE DATOS ---
 rm(list = ls())
 
-# Instalador automático de paquetes (Blindado)
 list.of.packages <- c(
   "randomForest", "ranger", "caret", "ggplot2", "dplyr",
   "reshape2", "vip", "pdp", "iml", "rpart", "rpart.plot", "future", "MLmetrics"
@@ -37,9 +31,7 @@ test_df_clean  <- na.omit(test_df[, c("economy_f", pred_base)])
 # =========================================================================
 # 1. ANÁLISIS DESCRIPTIVO AVANZADO
 # =========================================================================
-cat("\n======================================================\n")
 cat("      ANÁLISIS DESCRIPTIVO AVANZADO\n")
-cat("======================================================\n")
 
 cat("Dimensiones train:", nrow(train_df_clean), "x", ncol(train_df_clean), "\n")
 cat("Dimensiones test :", nrow(test_df_clean),  "x", ncol(test_df_clean),  "\n\n")
@@ -69,9 +61,7 @@ print(p_dist_class)
 # =========================================================================
 # 2. RANDOM FOREST — CLASIFICACIÓN
 # =========================================================================
-cat("\n======================================================\n")
 cat("      RANDOM FOREST: CLASIFICACIÓN\n")
-cat("======================================================\n")
 
 formula_class <- as.formula(paste("economy_f ~", paste(pred_base, collapse = " + ")))
 cat("Fórmula clasificación:\n"); print(formula_class)
@@ -90,6 +80,7 @@ print(rf_class)
 
 # --- 2B. VALIDACIÓN CRUZADA (Caret) ---
 cat("\n--- EJECUTANDO VALIDACIÓN CRUZADA (5-FOLD CV) ---\n")
+library(caret)
 trControl <- trainControl(
   method          = "cv",
   number          = 5,
@@ -160,9 +151,7 @@ print(p_cm_class)
 # =========================================================================
 # 3. IMPORTANCIA DE VARIABLES
 # =========================================================================
-cat("\n======================================================\n")
 cat("      IMPORTANCIA DE VARIABLES\n")
-cat("======================================================\n")
 
 # 3A. Importancia por Impureza (Gini)
 imp_class <- as.data.frame(rf_class$importance)
@@ -195,11 +184,9 @@ print(p_imp_perm)
 # =========================================================================
 # 4. EXTRACCIÓN DE UN ÁRBOL DEL BOSQUE Y ÁRBOL AUXILIAR
 # =========================================================================
-cat("\n======================================================\n")
 cat("      EXTRACCIÓN E INTERPRETACIÓN DE ÁRBOLES\n")
-cat("======================================================\n")
 
-# 4A. Extracción estructural de un árbol interno del bosque (NUEVO SEGÚN GUÍA)
+# 4A. Extracción estructural de un árbol interno del bosque
 cat("\nEstructura interna del Árbol número 1 del Random Forest:\n")
 arbol_1 <- getTree(rf_class, k = 1, labelVar = TRUE)
 print(head(arbol_1, 15))
@@ -210,7 +197,7 @@ arbol_aux_class <- rpart(
   formula_class,
   data    = train_df_clean,
   method  = "class",
-  control = rpart.control(maxdepth = 3, minbucket = 100, cp = 0.001)
+  control = rpart.control(maxdepth = 3, minbucket = 10, cp = 0.0001)
 )
 rpart.plot(arbol_aux_class, main = "Árbol Auxiliar para Interpretación Visual", type = 3, extra = 104, fallen.leaves = TRUE, shadow.col = "gray")
 
@@ -218,12 +205,9 @@ rpart.plot(arbol_aux_class, main = "Árbol Auxiliar para Interpretación Visual"
 # =========================================================================
 # 5. PARTIAL DEPENDENCE PLOTS (PDP) Y SHAP VALUES
 # =========================================================================
-cat("\n======================================================\n")
 cat("      INTERPRETABILIDAD: PDP Y SHAP\n")
-cat("======================================================\n")
 
 # 5A. Partial Dependence Plot
-# Asumimos que 'travelDistance' es un predictor continuo útil
 p_pdp <- partial(rf_class, pred.var = "travelDistance", train = train_df_clean, which.class = "Economy", prob = TRUE)
 print(autoplot(p_pdp) + labs(title = "PDP: Efecto de travelDistance sobre la probabilidad de ser Economy", y = "Probabilidad Media"))
 
@@ -248,7 +232,7 @@ predictor_economy <- Predictor$new(
   predict.function = predict_fun_economy, type = "prob"
 )
 
-# 5C. SHAP Global (NUEVO SEGÚN GUÍA)
+# 5C. SHAP Global
 cat("\nCalculando Importancia Global (FeatureImp) basada en iml...\n")
 set.seed(1994)
 effect_global <- FeatureImp$new(predictor_economy, loss = "ce", n.repetitions = 3)
@@ -264,14 +248,13 @@ print(plot(shap_obs_class) + labs(title = "SHAP Local para observación Test[1] 
 # =========================================================================
 # 6. RANDOM FOREST — REGRESIÓN (log_price)
 # =========================================================================
-cat("\n======================================================\n")
 cat("      RANDOM FOREST: REGRESIÓN (log_price)\n")
-cat("======================================================\n")
 
 pred_reg <- c(pred_base, "economy_f")
 formula_reg <- as.formula(paste("log_price ~", paste(pred_reg, collapse = " + ")))
 cat("Fórmula regresión:\n"); print(formula_reg)
 
+# Preparación de datos de Train para Regresión
 train_df_reg <- na.omit(train_df[, c("log_price", pred_reg)])
 
 set.seed(1994)
@@ -282,7 +265,40 @@ rf_reg <- randomForest(
   importance = TRUE
 )
 
-cat("\n--- MODELO REGRESIÓN ENTRADO ---\n")
+cat("\n--- MODELO REGRESIÓN ENTRENADO ---\n")
 print(rf_reg)
 
+# Gráfico clásico de importancia para regresión (%IncMSE y MeanDecreaseAccuracy)
 varImpPlot(rf_reg, main = "Importancia de Variables (Random Forest Regresión)")
+
+# --- 6B. PREDICCIÓN Y CONVERSIÓN INVERSA A EUROS REALES ---
+cat("      PREDICCIONES Y EVALUACIÓN EN ESCALA REAL (EUROS)\n")
+
+# Aislamos el conjunto de test para regresión incluyendo el precio real sin transformar (totalPrice)
+test_df_reg <- na.omit(test_df[, c("log_price", "totalPrice", pred_reg)])
+
+# 1. Realizar las predicciones sobre el Test Set (Devuelve valores en escala logarítmica)
+pred_log <- predict(rf_reg, test_df_reg)
+
+# 2. TRANSFORMACIÓN INVERSA: Aplicamos la exponencial para volver a Euros (€)
+pred_euros <- exp(pred_log)
+
+# 3. Consolidar resultados en una tabla comparativa
+resultados_finales <- data.frame(
+  Precio_Real_Euros = test_df_reg$totalPrice,
+  Prediccion_Euros  = round(pred_euros, 2),
+  Diferencia_Absoluta = round(abs(test_df_reg$totalPrice - pred_euros), 2)
+)
+
+cat("Muestra de las primeras 10 predicciones convertidas de vuelta a Euros:\n")
+print(head(resultados_finales, 10))
+
+# 4. Calcular métricas de error en la escala real monetaria usando MLmetrics
+mae_euros  <- MLmetrics::MAE(y_pred = pred_euros, y_true = test_df_reg$totalPrice)
+rmse_euros <- MLmetrics::RMSE(y_pred = pred_euros, y_true = test_df_reg$totalPrice)
+mape_euros <- MLmetrics::MAPE(y_pred = pred_euros, y_true = test_df_reg$totalPrice)
+
+cat("\nMétricas de Rendimiento en Escala Real (Euros):\n")
+cat("-> MAE (Error Absoluto Medio):", round(mae_euros, 2), "€\n")
+cat("-> RMSE (Raíz del Error Cuadrático Medio):", round(rmse_euros, 2), "€\n")
+cat("-> MAPE (Error Porcentual Absoluto Medio):", round(mape_euros * 100, 2), "%\n")
