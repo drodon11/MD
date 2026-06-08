@@ -58,6 +58,29 @@ ggplot(melt(naive_bayes_ramia$resample[, -4]), aes(x = variable, y = value, fill
   labs(title = "Estabilidad de Naive Bayes (Resamples)", x = NULL, y = NULL) +
   theme_minimal()
 
+# --- Predicción y Evaluación (Matriz de Confusión) para Naive Bayes ---
+cat("\n Evaluando rendimiento de Naive Bayes con Matrices Avanzadas...\n")
+
+# 1. Predicción sobre el conjunto de test
+nb_preds <- predict(naive_bayes_ramia, newdata = test_df[, vars_num])
+
+# 2. Matriz de confusión formal con Caret (Accuracy, Kappa, Sensitivity...)
+matrix_stats_nb <- confusionMatrix(nb_preds, test_df$economy_f)
+print(matrix_stats_nb)
+
+# 3. Visualización gráfica de la matriz de confusión con ggplot2
+conf_tbl_nb <- table(Predicted = nb_preds, Actual = test_df$economy_f)
+conf_df_nb  <- as.data.frame(conf_tbl_nb)
+colnames(conf_df_nb) <- c("Predicted", "Actual", "Freq")
+
+ggplot(conf_df_nb, aes(x = Actual, y = Predicted, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), size = 5) +
+  # Usamos un tono verde para diferenciarlo visualmente de la matriz azul del kNN
+  scale_fill_gradient(low = "#f7fcf0", high = "#006d2c") + 
+  labs(title = "Matriz de Confusión Naive Bayes", x = "Valor Real", y = "Predicción") +
+  theme_minimal()
+
 
 # ---  Frontera de Decisión Naive Bayes (PCA Plano) ---
 cat("\nGenerando frontera de decisión para Naive Bayes...\n")

@@ -21,12 +21,12 @@ library(biotools)
 # Cargamos el entorno de datos oficial del proyecto
 load("data/interim/model_data.RData")
 
-# CORREGIDO: El target de clasificación ahora es economy_f (limpiando niveles para caret)
+# El target de clasificación ahora es economy_f (limpiando niveles para caret)
 train_df$economy_f <- as.factor(make.names(train_df$economy_f))
 test_df$economy_f  <- as.factor(make.names(test_df$economy_f))
 
-# Seleccionamos las columnas numéricas cuantitativas (totalPrice incluido como predictor)
-vars_num <- c("elapsedDays", "taxAmount", "totalPrice", 
+# ACTUALIZADO: Seleccionamos las columnas numéricas usando log_price en lugar de totalPrice
+vars_num <- c("elapsedDays", "taxAmount", "log_price", 
               "travelDistance", "segmentDistance", "layoverNumber")
 
 
@@ -38,11 +38,11 @@ cat("\n--- ANÁLISIS EXPLORATORIO INICIAL ---\n")
 # Frecuencias de la variable objetivo en entrenamiento
 print(table(train_df$economy_f))
 
-# Medias por grupo de las principales variables químicas/numéricas de los vuelos
+# ACTUALIZADO: Medias por grupo usando log_price
 vuelos_medias <- train_df %>%
   group_by(economy_f) %>%
   summarise(
-    totalPrice_media = mean(totalPrice),
+    log_price_media = mean(log_price),
     taxAmount_media = mean(taxAmount),
     elapsedDays_media = mean(elapsedDays),
     travelDistance_media = mean(travelDistance),
@@ -50,17 +50,17 @@ vuelos_medias <- train_df %>%
   )
 print(vuelos_medias)
 
-# Boxplot de la variable más crítica (totalPrice) según la clase de asiento
-ggplot(train_df, aes(x = economy_f, y = totalPrice, fill = economy_f)) +
+# ACTUALIZADO: Boxplot de la variable más crítica (log_price) según la clase de asiento
+ggplot(train_df, aes(x = economy_f, y = log_price, fill = economy_f)) +
   geom_boxplot(alpha = 0.75) +
-  labs(title = "Distribución de totalPrice por clase de vuelo", x = "Clase", y = "Precio (€)") +
+  labs(title = "Distribución de log_price por clase de vuelo", x = "Clase", y = "Log(Precio)") +
   theme_minimal() + 
   theme(legend.position = "none")
 
-# Relación bivariante inicial entre distancia y precio total
-ggplot(train_df, aes(x = travelDistance, y = totalPrice, color = economy_f)) +
+# ACTUALIZADO: Relación bivariante inicial entre distancia y log_price
+ggplot(train_df, aes(x = travelDistance, y = log_price, color = economy_f)) +
   geom_point(size = 2, alpha = 0.6) +
-  labs(title = "Separación visual de clases usando dos variables", x = "Distancia", y = "Precio Total") +
+  labs(title = "Separación visual de clases usando dos variables", x = "Distancia", y = "Log(Precio)") +
   theme_minimal()
 
 
@@ -79,7 +79,7 @@ print(modelo_lda)
 # Al tener 2 clases, hay exactamente K-1 = 1 función discriminante (LD1).
 lda_train_pred <- predict(modelo_lda, newdata = train_df[, vars_num])
 
-# Histograma discriminante (Equivalente al ldahist del documento Wine)
+# Histograma discriminante
 ldahist(lda_train_pred$x[, 1], g = train_df$economy_f, ymax = 1,
         main = "Distribución de las clases sobre el eje discriminante LD1")
 
@@ -102,8 +102,9 @@ print(confusionMatrix(data = lda_test_pred$class, reference = test_df$economy_f)
 
 # --- Visualización de Fronteras de Decisión LDA ---
 cat("\nGenerando regiones de clasificación bivariantes (LDA)...\n")
+# ACTUALIZADO: partimat con log_price
 partimat(
-  economy_f ~ totalPrice + travelDistance + taxAmount + elapsedDays,
+  economy_f ~ log_price + travelDistance + taxAmount + elapsedDays,
   data = train_df[, c("economy_f", vars_num)],
   method = "lda",
   prec = 150,
@@ -157,8 +158,9 @@ print(confusionMatrix(data = qda_test_pred$class, reference = test_df$economy_f)
 
 # --- Visualización de Fronteras de Decisión QDA ---
 cat("\nGenerando regiones de clasificación curvas (QDA)...\n")
+# ACTUALIZADO: partimat con log_price
 partimat(
-  economy_f ~ totalPrice + travelDistance + taxAmount + elapsedDays,
+  economy_f ~ log_price + travelDistance + taxAmount + elapsedDays,
   data = train_df[, c("economy_f", vars_num)],
   method = "qda",
   prec = 150,
