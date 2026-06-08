@@ -207,30 +207,71 @@ ggplot() +
 
 
 # ==============================================================================
-#          3. kNN REGRESIÓN (Predicción de totalPrice) (Original)
+#          3. kNN REGRESIÓN (Predicción de totalPrice): TUNING Y EVALUACIÓN
 # ==============================================================================
-cat("\n======================================================\n")
-cat("          3. kNN REGRESIÓN (Predicción de totalPrice)\n")
-cat("======================================================\n")
 
-df_reg <- rbind(train_df[, c("economy_f", vars_num)], 
-                test_df[, c("economy_f", vars_num)])
+# --- Búsqueda del K óptimo para Regresión (RMSE) ---
+cat("\n--- Búsqueda del K óptimo mediante Cross-Validation ---\n")
 
-# Guardamos los valores reales y ocultamos los del test
+# Configuramos Cross-Validation (5 folds)
+ctrl_reg <- trainControl(method = "cv", number = 5)
+
+# Definimos la cuadrícula de Ks impares a probar (del 3 al 31)
+grid_knn <- expand.grid(k = seq(3, 31, by = 2))
+
+# Entrenamos el modelo kNN buscando minimizar el RMSE. 
+# NOTA: Solo usamos variables operativas, excluyendo taxAmount y log_price para evitar fugas (leakage).
+set.seed(1994)
+knn_reg_cv <- train(
+  totalPrice ~ elapsedDays + travelDistance + segmentDistance + layoverNumber, 
+  data = train_df, 
+  method = "knn",
+  trControl = ctrl_reg,
+  tuneGrid = grid_knn,
+  metric = "RMSE",
+  preProcess = c("center", "scale") # ¡Escalado crucial para kNN!
+)
+
+# Imprimir los resultados del tuning
+print(knn_reg_cv)
+
+# Gráfico para ver cómo cae el error (RMSE) a medida que aumentamos K
+# Puedes exportar este gráfico para tu informe
+par(mfrow=c(1,1))
+plot(knn_reg_cv, main = "kNN Regresión: RMSE vs. Número de Vecinos (K)")
+
+
+# --- Evaluar el mejor modelo en el Test Set ---
+cat("\n--- Evaluación en Test Set del Mejor kNN ---\n")
+y_pred <- predict(knn_reg_cv, newdata = test_df)
 y_real <- test_df$totalPrice
-df_reg$totalPrice[test_idx] <- NA
 
-# Ejecutamos kNN para estimar el precio (K=1)
-result_reg <- kNN(df_reg, variable = "totalPrice", k = 1)
+# Calcular métricas de regresión
+rmse_knn <- RMSE(y_pred, y_real)
+mae_knn  <- MAE(y_pred, y_real)
+r2_knn   <- R2(y_pred, y_real)
 
-y_pred <- result_reg$totalPrice[test_idx]
+# Mostrar resultados finales
+cat(sprintf("Mejor K seleccionado: %d\n", knn_reg_cv$bestTune$k))
+cat(sprintf("RMSE en Test: $%.2f\n", rmse_knn))
+cat(sprintf("MAE en Test:  $%.2f\n", mae_knn))
+cat(sprintf("R-Cuadrado:   %.4f\n", r2_knn))
 
-# Gráficos de evaluación
+
+# --- Gráficos de evaluación del mejor modelo ---
+# Vuelve a configurar el panel de gráficos a 1 fila y 2 columnas
 par(mfrow=c(1,2))
-plot(y_pred, y_real, main = "kNN Regresión: Predicho vs Real", 
-     xlab = "Predicción de Precio", ylab = "Precio Real", col = "blue", pch = 20)
-abline(0, 1, col = "red", lwd = 2) # Línea ideal (lo predicho = lo real)
 
-plot(y_pred - y_real, main = "Errores Residuales", 
-     ylab = "Diferencia (Predicho - Real)", col = "darkgreen", pch = 20)
+# Gráfico 1: Predicho vs Real
+plot(y_pred, y_real, 
+     main = sprintf("Predicho vs Real (K=%d)", knn_reg_cv$bestTune$k), 
+     xlab = "Predicción de Precio", ylab = "Precio Real", 
+     col = "dodgerblue", pch = 20, alpha = 0.5)
+abline(0, 1, col = "red", lwd = 2) # Línea ideal
+
+# Gráfico 2: Errores Residuales
+plot(y_pred - y_real, 
+     main = "Errores Residuales", 
+     ylab = "Diferencia (Predicho - Real)", xlab = "Índice de Vuelo",
+     col = "darkgreen", pch = 20, alpha = 0.5)
 abline(h = 0, col = "red", lwd = 2)
