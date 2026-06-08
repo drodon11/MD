@@ -176,7 +176,7 @@ colnames(conf_df) <- c("Predicted", "Actual", "Freq")
 ggplot(conf_df, aes(x = Actual, y = Predicted, fill = Freq)) +
   geom_tile(color = "white") +
   geom_text(aes(label = Freq), size = 5) +
-  scale_fill_gradient(low = "#f7fcf0", high = "#084081") +
+  scale_fill_gradient(low = "#f7fcf0", high = "#F2F255") +
   labs(title = "Matriz de Confusión kNN", x = "Valor Real", y = "Predicción") +
   theme_minimal()
 

@@ -89,7 +89,7 @@ lda_test_pred <- predict(modelo_lda, newdata = test_df[, vars_num])
 
 # Matriz de confusión básica y Accuracy en test
 MC_lda <- table(Real = test_df$economy_f, Predicho = lda_test_pred$class)
-cat("\nMatriz de Confusión LDA (Test):\n")
+cat("\nMatriz de Confusión Básica LDA (Test):\n")
 print(MC_lda)
 
 accuracy_lda <- sum(diag(MC_lda)) / sum(MC_lda)
@@ -98,6 +98,19 @@ cat(sprintf("Accuracy LDA en Test: %.4f\n", accuracy_lda))
 # Evaluación formal con la suite de Caret
 cat("\nMétricas de rendimiento detalladas (LDA):\n")
 print(confusionMatrix(data = lda_test_pred$class, reference = test_df$economy_f))
+
+# Visualización gráfica de la matriz de confusión LDA ---
+conf_tbl_lda <- table(Predicted = lda_test_pred$class, Actual = test_df$economy_f)
+conf_df_lda  <- as.data.frame(conf_tbl_lda)
+colnames(conf_df_lda) <- c("Predicted", "Actual", "Freq")
+
+plot_lda_cm <- ggplot(conf_df_lda, aes(x = Actual, y = Predicted, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), size = 5) +
+  scale_fill_gradient(low = "#f7fbff", high = "#08519c") + # Tono azul para LDA
+  labs(title = "Matriz de Confusión LDA", x = "Valor Real", y = "Predicción") +
+  theme_minimal()
+print(plot_lda_cm)
 
 
 # --- Visualización de Fronteras de Decisión LDA ---
@@ -145,7 +158,7 @@ qda_test_pred <- predict(modelo_qda, newdata = test_df[, vars_num])
 
 # Matriz de confusión básica y Accuracy en test
 MC_qda <- table(Real = test_df$economy_f, Predicho = qda_test_pred$class)
-cat("\nMatriz de Confusión QDA (Test):\n")
+cat("\nMatriz de Confusión Básica QDA (Test):\n")
 print(MC_qda)
 
 accuracy_qda <- sum(diag(MC_qda)) / sum(MC_qda)
@@ -154,6 +167,19 @@ cat(sprintf("Accuracy QDA en Test: %.4f\n", accuracy_qda))
 # Evaluación formal con Caret
 cat("\nMétricas de rendimiento detalladas (QDA):\n")
 print(confusionMatrix(data = qda_test_pred$class, reference = test_df$economy_f))
+
+# Visualización gráfica de la matriz de confusión QDA ---
+conf_tbl_qda <- table(Predicted = qda_test_pred$class, Actual = test_df$economy_f)
+conf_df_qda  <- as.data.frame(conf_tbl_qda)
+colnames(conf_df_qda) <- c("Predicted", "Actual", "Freq")
+
+plot_qda_cm <- ggplot(conf_df_qda, aes(x = Actual, y = Predicted, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), size = 5) +
+  scale_fill_gradient(low = "#fff5eb", high = "#d94801") + # Tono naranja para QDA
+  labs(title = "Matriz de Confusión QDA", x = "Valor Real", y = "Predicción") +
+  theme_minimal()
+print(plot_qda_cm)
 
 
 # --- Visualización de Fronteras de Decisión QDA ---
